@@ -491,7 +491,11 @@ export class Renderer {
     for (const p of game.projectiles) if (p.t >= 0) put(p.x, p.y, p.kind === 'shell' ? 1.2 : 0.8, 0.5);
     for (const li of this.lights) put(li.x, li.y, li.r, li.a * (li.t / li.max));
     for (const s of game.strikes) put(s.x, s.y, s.splash * 1.5, 0.6);
-    for (const e of game.enemies) if (e.def.id === 'warden') put(e.x, e.y, 1.4, 0.5);
+    // every shadow carries a faint halo of visibility so silhouettes read even far from towers
+    for (const e of game.enemies) {
+      const fy = e.def.flying ? e.y - S.FLY_HEIGHT : e.y;
+      put(e.x, fy, e.def.radius * 3.4 + 0.6, 0.9);
+    }
 
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);

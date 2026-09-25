@@ -31,7 +31,7 @@ class App implements AppApi {
   touch = false;
   difficulty: Difficulty = 'normal';
 
-  private renderer: Renderer;
+  renderer: Renderer;
   private ui: UI;
   private attract: Bot | null = null;
   private hover: { x: number; y: number } | null = null;
@@ -484,4 +484,4 @@ class App implements AppApi {
   }
 }
 
-new App();
+(window as unknown as { lumen: App }).lumen = new App();
