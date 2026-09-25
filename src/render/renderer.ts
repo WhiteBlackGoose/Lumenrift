@@ -62,6 +62,7 @@ export class Renderer {
   private flashWhite = 0;
   private darkness = 0.44;
   private pathVersion = -1;
+  private pathGame: Game | null = null;
   private pathRifts = -1;
   private paths: { pts: { x: number; y: number }[]; forming: boolean }[] = [];
   private crystals: { x: number; y: number }[] = [];
@@ -72,6 +73,16 @@ export class Renderer {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.light = document.createElement('canvas');
     this.lctx = this.light.getContext('2d')!;
+  }
+
+  /** Clear transient effects when a new game starts. */
+  reset() {
+    this.parts.list.length = 0;
+    this.chains = [];
+    this.pillars = [];
+    this.lights = [];
+    this.flashRed = this.flashWhite = 0;
+    this.cam.shake = 0;
   }
 
   resize(w: number, h: number, insetTop: number, insetBottom: number) {
@@ -707,7 +718,8 @@ export class Renderer {
 
   private drawPaths(game: Game, view: ViewState) {
     const nR = game.activeRifts().length + game.formingRifts().length;
-    if (this.pathVersion !== game.flowVersion || this.pathRifts !== nR) {
+    if (this.pathVersion !== game.flowVersion || this.pathRifts !== nR || this.pathGame !== game) {
+      this.pathGame = game;
       this.pathVersion = game.flowVersion;
       this.pathRifts = nR;
       this.paths = [

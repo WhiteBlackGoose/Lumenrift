@@ -185,6 +185,9 @@ export class Game {
   plan: WavePlan | null = null;
   nextPlan: WavePlan;
   private queue: WaveSpawn[] = [];
+  get queued() {
+    return this.queue.length;
+  }
   time = 0;
   over = false;
   won = false;
@@ -222,7 +225,7 @@ export class Game {
     return this.map.rifts.slice(0, riftsOpenAt(Math.max(1, this.wave)));
   }
   formingRifts() {
-    return this.map.rifts.slice(riftsOpenAt(Math.max(1, this.wave)), riftsOpenAt(this.wave + 1));
+    return this.map.rifts.slice(riftsOpenAt(Math.max(1, this.wave)), riftsOpenAt(Math.max(1, this.wave + 1)));
   }
   buildingByUid(uid: number) {
     return this.byUid.get(uid);
@@ -311,7 +314,8 @@ export class Game {
   private scratch = new Float32Array(MAP_W * MAP_H);
   private pathStillOpen(blockIdx: number): boolean {
     const f = computeFlow((i) => this.groundCost(i, blockIdx), this.scratch);
-    for (const r of this.map.rifts.slice(0, riftsOpenAt(this.wave + 1))) if (f[idx(r.x, r.y)] >= INF) return false;
+    // every rift, including ones that have not opened yet, must keep a path to the Beacon
+    for (const r of this.map.rifts) if (f[idx(r.x, r.y)] >= INF) return false;
     for (const e of this.enemies) {
       if (e.def.flying || e.dead) continue;
       const ti = idx(Math.floor(e.x), Math.floor(e.y));

@@ -68,11 +68,9 @@ export class Input {
     this.canvas.setPointerCapture(e.pointerId);
     const p: Ptr = { id: e.pointerId, x: e.offsetX, y: e.offsetY, sx: e.offsetX, sy: e.offsetY, button: e.button, type: e.pointerType, moved: false };
     this.ptrs.set(e.pointerId, p);
-    if (this.ptrs.size === 2) {
-      const [a, b] = [...this.ptrs.values()];
-      this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
-      this.pinchMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      a.moved = b.moved = true; // no taps from a pinch
+    if (this.ptrs.size >= 2) {
+      for (const q of this.ptrs.values()) q.moved = true; // no taps from multi-touch
+      this.seedPinch();
       this.painting = false;
       return;
     }
@@ -92,6 +90,13 @@ export class Input {
         p.moved = true; // consumed
       }
     }
+  }
+
+  private seedPinch() {
+    const [a, b] = [...this.ptrs.values()];
+    if (!a || !b) return;
+    this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    this.pinchMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
 
   private move(e: PointerEvent) {
@@ -123,8 +128,28 @@ export class Input {
       const t = this.tile(p.x, p.y);
       const k = t.x + ',' + t.y;
       if (k !== this.lastPaint) {
+        // walk every tile between the last painted one and this one so fast drags leave no gaps
+        const [lx, ly] = this.lastPaint.split(',').map(Number);
+        let x = lx,
+          y = ly;
+        const dx = Math.abs(t.x - x),
+          dy = -Math.abs(t.y - y);
+        const sx = x < t.x ? 1 : -1,
+          sy = y < t.y ? 1 : -1;
+        let err = dx + dy;
+        for (let n = 0; n < 200 && (x !== t.x || y !== t.y); n++) {
+          const e2 = 2 * err;
+          if (e2 >= dy) {
+            err += dy;
+            x += sx;
+          }
+          if (e2 <= dx) {
+            err += dx;
+            y += sy;
+          }
+          this.h.paint(x, y);
+        }
         this.lastPaint = k;
-        this.h.paint(t.x, t.y);
       }
       return;
     }
@@ -136,6 +161,13 @@ export class Input {
   private up(e: PointerEvent, cancelled = false) {
     const p = this.ptrs.get(e.pointerId);
     this.ptrs.delete(e.pointerId);
+    if (this.ptrs.size >= 2) this.seedPinch();
+    else this.pinchDist = 0;
+    if (this.ptrs.size === 1) {
+      // continue as a pan with the remaining finger, without a jump
+      const r = [...this.ptrs.values()][0];
+      r.moved = true;
+    }
     if (this.ptrs.size === 0) {
       this.painting = false;
       this.panning = false;

@@ -34,6 +34,9 @@ class App implements AppApi {
   renderer: Renderer;
   private ui: UI;
   private attract: Bot | null = null;
+  get inAttract() {
+    return !!this.attract;
+  }
   private hover: { x: number; y: number } | null = null;
   private ghost: { x: number; y: number } | null = null;
   private overHandled = false;
@@ -93,6 +96,8 @@ class App implements AppApi {
   // ------------------------------------------------------------------ game lifecycle
 
   private startAttract(showTitle = true) {
+    this.autoBot = null;
+    this.renderer.reset();
     const g = new Game((Math.random() * 1e9) | 0, 'casual');
     this.attract = new Bot(g, { skill: 0.8, maze: false });
     // fast-forward so the backdrop shows a living defence
@@ -120,6 +125,9 @@ class App implements AppApi {
     this.difficulty = d;
     const seed = params.get('seed') ? Number(params.get('seed')) : (Math.random() * 1e9) | 0;
     this.attract = null;
+    this.autoBot = null;
+    this.renderer.reset();
+    this.ui.resetRun();
     this.game = new Game(seed, d);
     this.placing = null;
     this.selected = null;
@@ -142,7 +150,33 @@ class App implements AppApi {
       }
       this.game.drainEvents();
     }
-    if (!this.touch) this.ui.toast('Build your defences, then call the night', 'small info', 3.5);
+    this.tutorial();
+  }
+
+  private tutTimers: number[] = [];
+  /** A few gentle hints the very first time someone plays. */
+  private tutorial() {
+    this.tutTimers.forEach(clearTimeout);
+    this.tutTimers = [];
+    let seen = false;
+    try {
+      seen = !!localStorage.getItem('lumen.tutorial');
+      localStorage.setItem('lumen.tutorial', '1');
+    } catch {
+      /* ignore */
+    }
+    if (seen) {
+      this.ui.toast('Build your defences, then call the night', 'small info', 3);
+      return;
+    }
+    const act = this.touch ? 'Tap' : 'Click';
+    const tips = [
+      'Shadows will pour from the glowing rift and follow the pink trail to the Beacon.',
+      `Pick the Arbalest from the bottom bar, then ${act.toLowerCase()} beside the trail to build it.`,
+      'Bulwarks bend the trail. Longer paths mean more time under your towers\' fire.',
+      'When you are ready, call the night early for bonus aether, or wait for the countdown.',
+    ];
+    tips.forEach((t, i) => this.tutTimers.push(window.setTimeout(() => this.game && !this.attract && this.game.wave === 0 && this.ui.toast(t, 'small info', 5.2), 400 + i * 6000)));
   }
 
   restart() {
@@ -288,6 +322,7 @@ class App implements AppApi {
     const g = this.game;
     const k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
     if (k === 'Escape') {
+      if (this.attract) return;
       if (this.placing) this.setPlacing(null);
       else if (this.selected || this.coreSelected) this.deselect();
       else if (this.ui.screenOpen && g && !g.over && !this.attract) {

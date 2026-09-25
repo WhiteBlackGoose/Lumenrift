@@ -25,6 +25,7 @@ export interface AppApi {
   paused: boolean;
   touch: boolean;
   difficulty: Difficulty;
+  readonly inAttract: boolean;
   setPlacing(id: BuildingId | null): void;
   deselect(): void;
   selectCore(): void;
@@ -256,6 +257,12 @@ export class UI {
     this.root.append(top, this.bossBar, this.preview, this.toasts, this.panel, bottom, this.tooltip, this.hint);
   }
 
+  resetRun() {
+    this.seenUnlocked.clear();
+    this.last = {};
+    this.toasts.innerHTML = '';
+  }
+
   setHudVisible(v: boolean) {
     for (const h of this.hud) h.style.display = v ? '' : 'none';
     if (v) {
@@ -302,9 +309,8 @@ export class UI {
         this.callBtn.innerHTML = `<span class="txt">Call night</span><span class="bonus">+${bonus}◆</span><span class="time">${secs}s</span>`;
       });
     } else {
-      const left = g.enemies.length + (g.plan ? g.plan.spawns.length : 0) - 0;
-      const remaining = g.enemies.length;
-      set('call', 'w' + remaining + ':' + left, () => {
+      const remaining = g.enemies.length + g.queued;
+      set('call', 'w' + remaining, () => {
         this.callBtn.className = 'call-btn wave';
         this.callBtn.innerHTML = `<span class="txt">Shadows</span><span class="time">${remaining}</span>`;
       });
@@ -666,7 +672,7 @@ export class UI {
   }
 
   showMenu() {
-    if (!this.app.game || this.app.game.over) return;
+    if (!this.app.game || this.app.game.over || this.app.inAttract) return;
     this.app.togglePause(true);
     const card = el('div', 'card glass');
     card.append(el('div', 'over-title win', 'Paused'));
