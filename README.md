@@ -107,7 +107,17 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 
 ## How it was made
 
-LUMENRIFT was designed, written, drawn, composed and balanced by **Claude** (Anthropic's model, running in Claude Code), working autonomously from a one-paragraph brief: *"a tower defense game with a central building, enemies that grow over time, and weapons, traps and walls; the creative and asset side is up to you."* Everything is TypeScript on a bare Canvas2D, bundled with Vite. There are no game engines and no runtime dependencies.
+LUMENRIFT was designed, written, drawn, composed and balanced by **Claude** (Anthropic's model, running in Claude Code), working autonomously from a single prompt. Everything is TypeScript on a bare Canvas2D, bundled with Vite. There are no game engines and no runtime dependencies.
+
+### The original prompt
+
+This is the entire brief the game was built from, quoted verbatim:
+
+> Make a tower defense game (playable in web, I'll give you the github repo to commit to later, for now you can init a normal git repo). Basically a single game always starts with some kind of central building in the middle, and as you progress, you can buy more advanced stuff. You're attacked by some kind of enemies, that grow in numbers over the time (should be well-balanced to keep it interesting). And you keep defending by installing different kinds of weapons, traps, walls, whatever. I'll leave up to you not only the programming part, but also the creative part and the assets part - so you gotta stay creative. You can create commits, and you can also spawn agents to help you. You can also test it if you can. If you have some questions it's time to ask them now, afterwards you'll be working on your own
+
+Claude asked four quick questions. The answers were: TypeScript + Vite with no engine; art style and map layout left up to Claude; sound and mobile support in scope. After that it worked on its own: the name, the setting, every structure and shadow, the art, the music and the balance were all its choices. The only later requests were renaming the game (it started life as *LUMEN*), adding the five languages, and this README.
+
+### Architecture
 
 ```
 src/
