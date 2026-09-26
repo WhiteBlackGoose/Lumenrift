@@ -29,7 +29,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 - 🌗 **Dynamic lighting.** The world is dark. Your towers are the light.
 - 🎵 **Procedural audio.** Synthesized sound effects and an adaptive generative score that swells when the shadows come.
 - 📱 **Desktop and mobile.** Mouse and keyboard, or touch with pinch-zoom.
-- 🌍 **5 languages:** English, Deutsch, Español, Français, Русский. The game picks your system language automatically, and you can switch any time.
+- 🌍 **8 languages:** English, Deutsch, Español, Français, Italiano, Русский, Українська, Հայերեն. The game picks your system language automatically, and you can switch any time.
 
 ## Screenshots
 
@@ -47,7 +47,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 <td><img src="docs/img/maze.jpg" alt="Mid-game defence at night 23 with three rifts open"><br><sub><b>Three rifts, one light.</b> Night 23.</sub></td>
 </tr>
 <tr>
-<td><img src="docs/img/languages.jpg" alt="The title screen in five languages"><br><sub><b>Five languages</b>, detected from your system.</sub></td>
+<td><img src="docs/img/languages.jpg" alt="The title screen in several languages"><br><sub><b>Eight languages</b>, detected from your system.</sub></td>
 <td><img src="docs/img/victory.jpg" alt="Dawn Breaks victory screen: 30 nights survived, 1905 shadows banished"><br><sub><b>Dawn breaks.</b> Then you can keep going into endless night.</sub></td>
 </tr>
 </table>
@@ -115,7 +115,7 @@ This is the entire brief the game was built from, quoted verbatim:
 
 > Make a tower defense game (playable in web, I'll give you the github repo to commit to later, for now you can init a normal git repo). Basically a single game always starts with some kind of central building in the middle, and as you progress, you can buy more advanced stuff. You're attacked by some kind of enemies, that grow in numbers over the time (should be well-balanced to keep it interesting). And you keep defending by installing different kinds of weapons, traps, walls, whatever. I'll leave up to you not only the programming part, but also the creative part and the assets part - so you gotta stay creative. You can create commits, and you can also spawn agents to help you. You can also test it if you can. If you have some questions it's time to ask them now, afterwards you'll be working on your own
 
-Claude asked four quick questions. The answers were: TypeScript + Vite with no engine; art style and map layout left up to Claude; sound and mobile support in scope. After that it worked on its own: the name, the setting, every structure and shadow, the art, the music and the balance were all its choices. The only later requests were renaming the game (it started life as *LUMEN*), adding the five languages, and this README.
+Claude asked four quick questions. The answers were: TypeScript + Vite with no engine; art style and map layout left up to Claude; sound and mobile support in scope. After that it worked on its own: the name, the setting, every structure and shadow, the art, the music and the balance were all its choices. The only later requests were renaming the game (it started life as *LUMEN*), adding the languages (five at first, then Ukrainian, Italian and Armenian), and this README.
 
 ### Architecture
 
@@ -125,7 +125,7 @@ src/
   render/    camera, lighting, particles, procedural sprites (≈4.1k)
   audio/     WebAudio synthesizer and generative music (≈1k)
   ui/        DOM HUD, panels, screens, mouse/touch/keyboard input (≈1.1k)
-  i18n/      5 languages
+  i18n/      8 languages
 scripts/     headless balance simulator, browser smoke tests
 ```
 
@@ -205,7 +205,7 @@ The main agent designed the game, wrote the simulation, renderer, UI and balance
 - one composed the **audio engine**;
 - one drew the **entire sprite set** and iterated on it by screenshotting its own test scenes;
 - a fresh-eyed **reviewer** hunted bugs. It found eight, including a softlock where walling off a rift before it opened blocked all building, and all eight were fixed;
-- four **translators** handled German, Spanish, French and Russian at the same time.
+- seven **translators** handled German, Spanish, French, Russian, Italian, Ukrainian and Armenian, each working in parallel.
 
 ---
 

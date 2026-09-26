@@ -2,13 +2,16 @@ import { de } from './de';
 import { Dict, en, StringKey } from './en';
 import { es } from './es';
 import { fr } from './fr';
+import { hy } from './hy';
+import { it } from './it';
 import { ru } from './ru';
+import { uk } from './uk';
 
 export type { StringKey };
-export type Lang = 'en' | 'de' | 'es' | 'fr' | 'ru';
+export type Lang = 'en' | 'de' | 'es' | 'fr' | 'it' | 'ru' | 'uk' | 'hy';
 
-export const LANGS: Record<Lang, Dict> = { en, de, es, fr, ru };
-export const LANG_ORDER: Lang[] = ['en', 'de', 'es', 'fr', 'ru'];
+export const LANGS: Record<Lang, Dict> = { en, de, es, fr, it, ru, uk, hy };
+export const LANG_ORDER: Lang[] = ['en', 'de', 'es', 'fr', 'it', 'ru', 'uk', 'hy'];
 
 const STORE_KEY = 'lumen.lang';
 let current: Lang = detect();

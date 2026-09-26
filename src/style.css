@@ -18,8 +18,8 @@
   --bottom-h: 92px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  --font-title: 'Cinzel', 'Forum', Georgia, 'Times New Roman', serif;
-  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-title: 'Cinzel', 'Forum', 'Noto Serif Armenian', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Inter', 'Noto Sans Armenian', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 * {
