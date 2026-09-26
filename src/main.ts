@@ -7,7 +7,8 @@ import { isCoreTile } from './game/grid';
 import { Renderer, ViewState } from './render/renderer';
 import { Input } from './ui/input';
 import { saveBest } from './ui/storage';
-import { AppApi, BUILD_KEYS, UI } from './ui/ui';
+import { applyDocument, onLangChange, t } from './i18n';
+import { AppApi, bname, BUILD_KEYS, UI } from './ui/ui';
 
 const params = new URLSearchParams(location.search);
 
@@ -45,8 +46,10 @@ class App implements AppApi {
 
   constructor() {
     const canvas = document.getElementById('game') as HTMLCanvasElement;
+    applyDocument();
     this.renderer = new Renderer(canvas);
     this.ui = new UI(this);
+    onLangChange(() => this.ui.relocalize());
     this.touch = matchMedia('(pointer: coarse)').matches;
     new Input(canvas, {
       cam: this.renderer.cam,
@@ -166,16 +169,10 @@ class App implements AppApi {
       /* ignore */
     }
     if (seen) {
-      this.ui.toast('Build your defences, then call the night', 'small info', 3);
+      this.ui.toast(t('toast.buildHint'), 'small info', 3);
       return;
     }
-    const act = this.touch ? 'Tap' : 'Click';
-    const tips = [
-      'Shadows will pour from the glowing rift and follow the pink trail to the Beacon.',
-      `Pick the Arbalest from the bottom bar, then ${act.toLowerCase()} beside the trail to build it.`,
-      'Bulwarks bend the trail. Longer paths mean more time under your towers\' fire.',
-      'When you are ready, call the night early for bonus aether, or wait for the countdown.',
-    ];
+    const tips = [t('tut.1'), t(this.touch ? 'tut.2.touch' : 'tut.2.click'), t('tut.3'), t('tut.4')];
     tips.forEach((t, i) => this.tutTimers.push(window.setTimeout(() => this.game && !this.attract && this.game.wave === 0 && this.ui.toast(t, 'small info', 5.2), 400 + i * 6000)));
   }
 
@@ -238,7 +235,7 @@ class App implements AppApi {
   nova() {
     if (!this.game || this.attract) return;
     if (!this.game.nova()) {
-      this.ui.toast('Nova is recharging', 'small err', 1.2);
+      this.ui.toast(t('toast.novaCd'), 'small err', 1.2);
       audio.play('error');
     }
   }
@@ -271,7 +268,7 @@ class App implements AppApi {
     const id = this.placing!;
     const chk = g.canPlace(id, x, y);
     if (!chk.ok) {
-      if (!quiet) g.events.push({ type: 'error', msg: chk.reason! });
+      if (!quiet) g.events.push({ type: 'error', msg: chk.reason!, vars: chk.vars });
       return false;
     }
     g.place(id, x, y);
@@ -336,7 +333,7 @@ class App implements AppApi {
     if (bid) {
       if (g.isUnlocked(bid)) this.setPlacing(this.placing === bid ? null : bid);
       else {
-        this.ui.toast(`${BUILDINGS[bid].name} unlocks at Beacon level ${BUILDINGS[bid].tier}`, 'small err');
+        this.ui.toast(t('toast.unlocksAt', { name: bname(bid), n: BUILDINGS[bid].tier }), 'small err');
         audio.play('error');
       }
       return;
@@ -519,4 +516,4 @@ class App implements AppApi {
   }
 }
 
-(window as unknown as { lumen: App }).lumen = new App();
+(window as unknown as { lumenrift: App }).lumenrift = new App();

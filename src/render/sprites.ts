@@ -1,4 +1,4 @@
-// Procedural art for LUMEN. All drawing is Canvas2D; world functions expect a ctx scaled to 1 unit = 1 tile.
+// Procedural art for LUMENRIFT. All drawing is Canvas2D; world functions expect a ctx scaled to 1 unit = 1 tile.
 import { BUILDINGS, BuildingId, CORE_X, CORE_Y, ENEMIES, EnemyId } from '../game/config';
 import type { Game } from '../game/game';
 import { drawBuildingIcon } from './sprites/buildings';

@@ -18,7 +18,7 @@
   --bottom-h: 92px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  --font-title: 'Cinzel', Georgia, 'Times New Roman', serif;
+  --font-title: 'Cinzel', 'Forum', Georgia, 'Times New Roman', serif;
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -484,7 +484,7 @@ button:focus-visible {
   border-radius: 6px 6px 0 0;
 }
 .bbtn.fresh::after {
-  content: 'NEW';
+  content: attr(data-new);
   position: absolute;
   top: -6px;
   right: -4px;
@@ -508,7 +508,8 @@ button:focus-visible {
 }
 .abtn {
   position: relative;
-  width: 72px;
+  min-width: 72px;
+  padding: 0 6px;
   height: 72px;
   border-radius: 10px;
   overflow: hidden;
@@ -521,6 +522,7 @@ button:focus-visible {
   gap: 2px;
 }
 .abtn .lbl {
+  white-space: nowrap;
   font-family: var(--font-title);
   font-weight: 700;
   font-size: 12px;
@@ -564,7 +566,7 @@ button:focus-visible {
   position: absolute;
   right: 16px;
   bottom: calc(var(--bottom-h) + 22px + var(--safe-b));
-  width: 290px;
+  width: 310px;
   padding: 14px;
 }
 #panel .head {
@@ -645,6 +647,7 @@ button:focus-visible {
 }
 #panel .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .act {
@@ -683,7 +686,7 @@ button:focus-visible {
   color: var(--gold);
 }
 .act.small {
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   padding: 0 12px;
 }
 #panel .kills {
@@ -856,9 +859,10 @@ button:focus-visible {
 .logo {
   font-family: var(--font-title);
   font-weight: 900;
-  font-size: clamp(54px, 13vw, 96px);
-  letter-spacing: 0.18em;
-  margin-right: -0.18em;
+  font-size: min(60px, 10vw);
+  letter-spacing: 0.1em;
+  margin-right: -0.1em;
+  white-space: nowrap;
   line-height: 1;
   background: linear-gradient(180deg, #fff6d8 10%, #ffd27a 55%, #c9782a 100%);
   -webkit-background-clip: text;
@@ -1048,7 +1052,7 @@ button:focus-visible {
   display: flex;
   gap: 10px;
 }
-.row-btns .big-btn.alt {
+.big-btn.alt {
   background: rgba(255, 255, 255, 0.07);
   color: var(--text);
   box-shadow: none;
@@ -1176,7 +1180,8 @@ button:focus-visible {
     display: none;
   }
   .abtn {
-    width: 56px;
+    min-width: 56px;
+    padding: 0 4px;
     height: 62px;
   }
   .abtn .sub {
@@ -1237,4 +1242,24 @@ button:focus-visible {
   .abtn {
     height: 58px;
   }
+}
+
+.lang-select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+.lang-select option {
+  background: var(--panel-solid);
+  color: var(--text);
+}
+.settings .lang-select {
+  justify-self: start;
+  font-size: 14px;
+  padding: 6px 10px;
 }

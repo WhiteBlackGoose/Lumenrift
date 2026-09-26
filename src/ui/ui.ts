@@ -12,8 +12,9 @@ import {
   NOVA_COOLDOWN,
   VICTORY_WAVE,
 } from '../game/config';
-import { Building, Game, GameEvent, TargetMode } from '../game/game';
+import { Building, Game, GameEvent } from '../game/game';
 import { drawIcon } from '../render/sprites';
+import { lang, LANG_ORDER, LANGS, Lang, setLang, StringKey, t } from '../i18n';
 import { loadBest } from './storage';
 
 export interface AppApi {
@@ -43,19 +44,8 @@ export interface AppApi {
   cycleMode(): void;
 }
 
-export const ENEMY_LORE: Record<EnemyId, string> = {
-  shade: 'A drifting scrap of night. Common and steady.',
-  skitter: 'Fast and fragile. Arrives in skittering swarms.',
-  wraith: 'Flies straight over walls toward the Beacon. Needs anti-air.',
-  brute: 'Armoured hulk. Smashes through walls instead of walking around them.',
-  brood: 'Bloated egg-sac. Bursts into skitters when slain.',
-  warden: 'Hooded healer. Mends nearby shadows. Kill it first.',
-  carapace: 'Thick plates blunt weak hits. Bring heavy damage or piercing.',
-  colossus: 'Boss. Crushes walls and sheds shades as it walks.',
-  wyrm: 'Flying boss. Sheds wraiths from its coils.',
-};
 
-const MODE_LABEL: Record<TargetMode, string> = { first: 'First', last: 'Last', strong: 'Strongest', close: 'Closest' };
+
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'O'];
 export const BUILD_KEYS: Record<string, BuildingId> = Object.fromEntries(BUILD_ORDER.map((id, i) => [KEYS[i], id]));
 
@@ -143,7 +133,7 @@ export class UI {
     top.id = 'hud-top';
 
     this.coreStat = el('div', 'stat core-stat glass');
-    this.coreStat.title = 'The Beacon. If its light fails, the night wins. Click it to upgrade.';
+    this.coreStat.title = t('hud.coreTip');
     const ci = cachedIcon('core', 28);
     ci.style.width = ci.style.height = '28px';
     this.coreStat.append(ci);
@@ -155,33 +145,33 @@ export class UI {
     this.coreStat.addEventListener('click', () => this.app.selectCore());
 
     const moneyStat = el('div', 'stat glass');
-    moneyStat.title = 'Aether — earned by banishing shadows, surviving nights and harvesting crystal.';
+    moneyStat.title = t('hud.moneyTip');
     this.money = el('span', 'money');
     moneyStat.append(this.money);
 
     const night = el('div', 'stat night glass');
-    night.innerHTML = `<span class="label">Night</span>`;
+    night.innerHTML = `<span class="label">${t('hud.night')}</span>`;
     this.nightN = el('span', 'n', '1');
     night.append(this.nightN, el('span', 'of', '/ ' + VICTORY_WAVE));
 
     this.callBtn = el('button', 'call-btn') as HTMLButtonElement;
-    this.callBtn.title = 'Summon the next night early for bonus aether (N)';
+    this.callBtn.title = t('hud.callTip');
     this.callBtn.addEventListener('click', () => this.app.callWave());
 
     const grp = el('div', 'btn-group');
     this.speedBtn = el('button', 'icon-btn glass') as HTMLButtonElement;
-    this.speedBtn.title = 'Game speed (F)';
+    this.speedBtn.title = t('hud.speedTip');
     this.speedBtn.addEventListener('click', () => this.app.cycleSpeed());
     this.pauseBtn = el('button', 'icon-btn glass', SVG.pause) as HTMLButtonElement;
-    this.pauseBtn.title = 'Pause (Space)';
+    this.pauseBtn.title = t('hud.pauseTip');
     this.pauseBtn.addEventListener('click', () => this.app.togglePause());
     this.soundBtn = el('button', 'icon-btn glass opt', SVG.sound) as HTMLButtonElement;
-    this.soundBtn.title = 'Mute (M)';
+    this.soundBtn.title = t('hud.muteTip');
     this.soundBtn.addEventListener('click', () => {
       audio.muted = !audio.muted;
     });
     const menuBtn = el('button', 'icon-btn glass', SVG.menu) as HTMLButtonElement;
-    menuBtn.title = 'Menu (Esc)';
+    menuBtn.title = t('hud.menuTip');
     menuBtn.addEventListener('click', () => this.showMenu());
     grp.append(this.speedBtn, this.pauseBtn, this.soundBtn, menuBtn);
 
@@ -210,6 +200,7 @@ export class UI {
     buildBar.id = 'build-bar';
     BUILD_ORDER.forEach((id, i) => {
       const b = el('button', 'bbtn') as HTMLButtonElement;
+      b.dataset.new = t('hud.new');
       b.append(cachedIcon(id, 42));
       b.append(el('span', 'cost'));
       b.append(el('span', 'key', KEYS[i]));
@@ -217,7 +208,7 @@ export class UI {
         if (!this.app.game) return;
         this.seenUnlocked.add(id);
         if (!this.app.game.isUnlocked(id)) {
-          this.toast(`${BUILDINGS[id].name} unlocks at Beacon level ${BUILDINGS[id].tier}`, 'small err');
+          this.toast(t('toast.unlocksAt', { name: bname(id), n: BUILDINGS[id].tier }), 'small err');
           audio.play('error');
           return;
         }
@@ -236,15 +227,15 @@ export class UI {
     const abil = el('div', 'glass');
     abil.id = 'abilities';
     this.novaBtn = el('button', 'abtn') as HTMLButtonElement;
-    this.novaBtn.innerHTML = `${SVG.nova}<span class="lbl">Nova</span><span class="sub"></span><span class="key">V</span><i class="cd"></i>`;
-    this.novaBtn.title = 'Solar Nova: a blast of light around the Beacon that burns and slows every shadow nearby (V)';
+    this.novaBtn.innerHTML = `${SVG.nova}<span class="lbl">${t('hud.nova')}</span><span class="sub"></span><span class="key">V</span><i class="cd"></i>`;
+    this.novaBtn.title = t('hud.novaTip');
     this.novaBtn.addEventListener('click', () => this.app.nova());
     this.beaconBtn = el('button', 'abtn') as HTMLButtonElement;
     const bi = cachedIcon('core', 30);
     bi.style.width = bi.style.height = '30px';
     this.beaconBtn.append(bi);
-    this.beaconBtn.insertAdjacentHTML('beforeend', '<span class="lbl">Beacon</span><span class="sub"></span><span class="key">B</span>');
-    this.beaconBtn.title = 'Upgrade the Beacon: more health, a stronger Nova and gun, and new structures (B)';
+    this.beaconBtn.insertAdjacentHTML('beforeend', `<span class="lbl">${t('hud.beacon')}</span><span class="sub"></span><span class="key">B</span>`);
+    this.beaconBtn.title = t('hud.beaconTip');
     this.beaconBtn.addEventListener('click', () => this.app.selectCore());
     abil.append(this.novaBtn, this.beaconBtn);
     bottom.append(buildBar, abil);
@@ -306,13 +297,13 @@ export class UI {
       const bonus = Math.floor(g.buildTimer * 1.5);
       set('call', 'b' + secs + ':' + bonus, () => {
         this.callBtn.className = 'call-btn';
-        this.callBtn.innerHTML = `<span class="txt">Call night</span><span class="bonus">+${bonus}◆</span><span class="time">${secs}s</span>`;
+        this.callBtn.innerHTML = `<span class="txt">${t('hud.callNight')}</span><span class="bonus">+${bonus}◆</span><span class="time">${secs}s</span>`;
       });
     } else {
       const remaining = g.enemies.length + g.queued;
       set('call', 'w' + remaining, () => {
         this.callBtn.className = 'call-btn wave';
-        this.callBtn.innerHTML = `<span class="txt">Shadows</span><span class="time">${remaining}</span>`;
+        this.callBtn.innerHTML = `<span class="txt">${t('hud.shadows')}</span><span class="time">${remaining}</span>`;
       });
     }
     set('speed', this.app.speed, () => (this.speedBtn.textContent = this.app.speed + '×'));
@@ -335,7 +326,7 @@ export class UI {
         btn.classList.toggle('poor', unlocked && poor);
         btn.classList.toggle('active', active);
         btn.classList.toggle('fresh', fresh);
-        (btn.querySelector('.cost') as HTMLElement).textContent = unlocked ? String(cost) : `Lv ${def.tier}`;
+        (btn.querySelector('.cost') as HTMLElement).textContent = unlocked ? String(cost) : t('hud.lv', { n: def.tier });
       });
     }
 
@@ -344,13 +335,13 @@ export class UI {
     set('nova', Math.ceil(g.novaCd), () => {
       const ready = g.novaCd <= 0;
       this.novaBtn.classList.toggle('ready', ready);
-      (this.novaBtn.querySelector('.sub') as HTMLElement).textContent = ready ? 'Ready' : Math.ceil(g.novaCd) + 's';
+      (this.novaBtn.querySelector('.sub') as HTMLElement).textContent = ready ? t('hud.ready') : Math.ceil(g.novaCd) + 's';
     });
     (this.novaBtn.querySelector('.cd') as HTMLElement).style.transform = `scaleY(${cdF})`;
     const cc = g.coreUpgradeCost();
     set('beacon', `${g.coreLevel}:${cc}:${g.money >= (cc ?? 1e9)}`, () => {
       const sub = this.beaconBtn.querySelector('.sub') as HTMLElement;
-      sub.innerHTML = cc === null ? 'Max' : `${gem}${cc}`;
+      sub.innerHTML = cc === null ? t('hud.max') : `${gem}${cc}`;
       sub.style.color = cc !== null && g.money >= cc ? 'var(--aether)' : '';
       this.beaconBtn.classList.toggle('ready', cc !== null && g.money >= cc);
     });
@@ -360,7 +351,7 @@ export class UI {
     set('boss', boss ? boss.uid + ':' + Math.ceil((boss.hp / boss.maxHp) * 200) : '', () => {
       this.bossBar.classList.toggle('hidden', !boss);
       if (boss) {
-        (this.bossBar.querySelector('.name') as HTMLElement).textContent = boss.def.name;
+        (this.bossBar.querySelector('.name') as HTMLElement).textContent = ename(boss.def.id);
         (this.bossBar.querySelector('.bar > i') as HTMLElement).style.transform = `scaleX(${Math.max(0, boss.hp / boss.maxHp)})`;
       }
     });
@@ -383,22 +374,22 @@ export class UI {
     }
     p.classList.remove('hidden');
     p.innerHTML = '';
-    const title = el('div', 'title', `<span>${g.phase === 'build' ? 'Coming' : 'Now'}: Night <b>${plan.wave}</b></span><span class="toggle">${this.previewCollapsed ? '▾' : '▴'}</span>`);
+    const title = el('div', 'title', `<span>${t(g.phase === 'build' ? 'preview.coming' : 'preview.now', { n: `<b>${plan.wave}</b>` })}</span><span class="toggle">${this.previewCollapsed ? '▾' : '▴'}</span>`);
     p.append(title);
-    if (plan.tag !== 'Night ' + plan.wave) p.append(el('div', 'tag', plan.tag));
+    if (plan.tag) p.append(el('div', 'tag', t(plan.tag)));
     const foes = el('div', 'foes');
     for (const [id, n] of Object.entries(plan.counts) as [EnemyId, number][]) {
       if (!n) continue;
       const f = el('div', 'foe' + (plan.newEnemy === id ? ' new' : ''));
-      f.title = `${ENEMIES[id].name}: ${ENEMY_LORE[id]}`;
+      f.title = `${ename(id)}: ${elore(id)}`;
       f.append(cachedIcon(id, 26), document.createTextNode('×' + n));
       foes.append(f);
     }
     p.append(foes);
     const notes: string[] = [];
-    if (plan.newEnemy) notes.push(`New: ${ENEMIES[plan.newEnemy].name}`);
-    if (g.phase === 'build' && g.formingRifts().length) notes.push('A new rift will open!');
-    if (plan.spawns.some((s) => s.elite > 1)) notes.push('Elite shadows');
+    if (plan.newEnemy) notes.push(t('preview.new', { name: ename(plan.newEnemy) }));
+    if (g.phase === 'build' && g.formingRifts().length) notes.push(t('preview.rift'));
+    if (plan.spawns.some((s) => s.elite > 1)) notes.push(t('preview.elite'));
     if (notes.length) p.append(el('div', 'note', notes.join(' · ')));
   }
 
@@ -412,8 +403,8 @@ export class UI {
       this.hint.classList.remove('hidden');
       const drag = BUILDINGS[placing].kind === 'wall' || BUILDINGS[placing].kind === 'trap';
       this.hint.innerHTML = this.app.touch
-        ? `Tap a tile, then tap again to build <b>${BUILDINGS[placing].name}</b>`
-        : `Click to build <b>${BUILDINGS[placing].name}</b>${drag ? ' · drag to paint' : ''} · Right-click / Esc to cancel`;
+        ? t('hint.touch', { name: bname(placing) })
+        : [t('hint.click', { name: bname(placing) }), ...(drag ? [t('hint.drag')] : []), t('hint.cancel')].join(' · ');
     });
   }
 
@@ -445,12 +436,12 @@ export class UI {
     const head = el('div', 'head');
     head.append(cachedIcon(def.id, 48));
     const pips = def.levels.map((_, i) => `<i class="${i <= b.level ? 'on' : ''}"></i>`).join('');
-    const info = el('div', '', `<div class="name">${def.name}</div><div class="lvl">Level ${b.level + 1}<span class="pips">${pips}</span></div>`);
+    const info = el('div', '', `<div class="name">${bname(def.id)}</div><div class="lvl">${t('panel.level', { n: b.level + 1 })}<span class="pips">${pips}</span></div>`);
     const close = el('button', 'close', '×');
     close.addEventListener('click', () => this.app.deselect());
     head.append(info, close);
     p.append(head);
-    p.append(el('div', 'blurb', def.blurb));
+    p.append(el('div', 'blurb', t(`b.${def.id}.blurb` as StringKey)));
     const next = b.level + 1 < def.levels.length ? def.levels[b.level + 1] : null;
     p.append(statsList(def.levels[b.level], next, b.hp));
 
@@ -458,29 +449,29 @@ export class UI {
     const up = g.upgradeCost(b);
     const ub = el('button', 'act primary') as HTMLButtonElement;
     if (up === null) {
-      ub.textContent = 'Max level';
+      ub.textContent = t('panel.maxLevel');
       ub.disabled = true;
     } else {
-      ub.innerHTML = `Upgrade <span class="c">${gem}${up}</span>`;
+      ub.innerHTML = `${t('panel.upgrade')} <span class="c">${gem}${up}</span>`;
       ub.disabled = g.money < up;
-      ub.title = 'Upgrade (U)';
+      ub.title = t('panel.upgradeTip');
       ub.addEventListener('click', () => this.app.upgradeSelected());
     }
     const sb = el('button', 'act sell') as HTMLButtonElement;
-    sb.innerHTML = `Sell <span class="c">+${g.sellValue(b)}</span>`;
-    sb.title = g.phase === 'build' && b.freshSpend > 0 ? 'Full refund for anything bought this build phase (X)' : 'Sell (X)';
+    sb.innerHTML = `${t('panel.sell')} <span class="c">+${g.sellValue(b)}</span>`;
+    sb.title = g.phase === 'build' && b.freshSpend > 0 ? t('panel.sellFreshTip') : t('panel.sellTip');
     sb.addEventListener('click', () => this.app.sellSelected());
     actions.append(ub, sb);
     if (def.kind === 'tower' && def.id !== 'obelisk' && def.id !== 'pyre') {
       const mb = el('button', 'act small') as HTMLButtonElement;
-      mb.innerHTML = `◎ ${MODE_LABEL[b.mode]}`;
-      mb.title = 'Targeting priority (T)';
+      mb.innerHTML = `◎ ${t(`mode.${b.mode}` as StringKey)}`;
+      mb.title = t('panel.targetTip');
       mb.addEventListener('click', () => this.app.cycleMode());
       actions.append(mb);
     }
     p.append(actions);
     if (def.kind === 'tower' || def.kind === 'trap' || def.id === 'frost')
-      p.append(el('div', 'kills', `<span>Shadows banished: ${b.kills}</span><span>Damage: ${fmt(b.dealt)}</span>`));
+      p.append(el('div', 'kills', `<span>${t('panel.kills', { n: b.kills })}</span><span>${t('panel.damage', { n: fmt(b.dealt) })}</span>`));
   }
 
   private renderCorePanel(g: Game) {
@@ -490,34 +481,34 @@ export class UI {
     const head = el('div', 'head');
     head.append(cachedIcon('core', 48));
     const pips = CORE_LEVELS.map((_, i) => `<i class="${i <= g.coreLevel ? 'on' : ''}"></i>`).join('');
-    head.append(el('div', '', `<div class="name">The Beacon</div><div class="lvl">Level ${g.coreLevel + 1}<span class="pips">${pips}</span></div>`));
+    head.append(el('div', '', `<div class="name">${t('core.name')}</div><div class="lvl">${t('panel.level', { n: g.coreLevel + 1 })}<span class="pips">${pips}</span></div>`));
     const close = el('button', 'close', '×');
     close.addEventListener('click', () => this.app.deselect());
     head.append(close);
     p.append(head);
-    p.append(el('div', 'blurb', 'The last light. Its gun, its Nova and the structures you can raise all grow as it ascends.'));
+    p.append(el('div', 'blurb', t('core.blurb')));
     const C = g.core;
     const N = g.coreLevel + 1 < CORE_LEVELS.length ? CORE_LEVELS[g.coreLevel + 1] : null;
     const dl = el('dl', 'stats');
     const row = (k: string, v: string, nv?: string) => {
       dl.append(el('dt', '', k), el('dd', '', v + (nv && nv !== v ? `<span class="up">→ ${nv}</span>` : '')));
     };
-    row('Health', `${Math.ceil(g.coreHp)} / ${C.hp}`, N ? String(N.hp) : undefined);
-    row('Gun damage', String(C.damage), N ? String(N.damage) : undefined);
-    row('Nova damage', String(C.nova), N ? String(N.nova) : undefined);
+    row(t('stat.health'), `${Math.ceil(g.coreHp)} / ${C.hp}`, N ? String(N.hp) : undefined);
+    row(t('core.gun'), String(C.damage), N ? String(N.damage) : undefined);
+    row(t('core.nova'), String(C.nova), N ? String(N.nova) : undefined);
     p.append(dl);
     if (N) {
-      const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === g.coreLevel + 2).map((id) => BUILDINGS[id].name);
-      if (unlocks.length) p.append(el('div', 'unlocks', `Unlocks: <b>${unlocks.join(', ')}</b>`));
+      const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === g.coreLevel + 2).map(bname);
+      if (unlocks.length) p.append(el('div', 'unlocks', t('core.unlocks', { list: unlocks.join(', ') })));
     }
     const actions = el('div', 'actions');
     const cc = g.coreUpgradeCost();
     const ub = el('button', 'act primary') as HTMLButtonElement;
     if (cc === null) {
-      ub.textContent = 'Fully ascended';
+      ub.textContent = t('core.maxed');
       ub.disabled = true;
     } else {
-      ub.innerHTML = `Ascend <span class="c">${gem}${cc}</span>`;
+      ub.innerHTML = `${t('core.ascend')} <span class="c">${gem}${cc}</span>`;
       ub.disabled = g.money < cc;
       ub.addEventListener('click', () => this.app.upgradeCore());
     }
@@ -530,18 +521,18 @@ export class UI {
   private showTip(id: BuildingId, anchor: HTMLElement) {
     const g = this.app.game;
     const def = BUILDINGS[id];
-    const t = this.tooltip;
-    t.innerHTML = '';
-    t.append(el('div', 'name', `${def.name}<span>${gem}${def.levels[0].cost}</span>`));
-    t.append(el('div', 'blurb', def.blurb));
-    t.append(statsList(def.levels[0], null));
-    if (g && !g.isUnlocked(id)) t.append(el('div', 'lock', `Requires Beacon level ${def.tier}`));
-    t.classList.remove('hidden');
+    const tip = this.tooltip;
+    tip.innerHTML = '';
+    tip.append(el('div', 'name', `${bname(id)}<span>${gem}${def.levels[0].cost}</span>`));
+    tip.append(el('div', 'blurb', t(`b.${id}.blurb` as StringKey)));
+    tip.append(statsList(def.levels[0], null));
+    if (g && !g.isUnlocked(id)) tip.append(el('div', 'lock', t('err.locked', { n: def.tier })));
+    tip.classList.remove('hidden');
     const r = anchor.getBoundingClientRect();
     const w = 250;
-    t.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
-    t.style.bottom = window.innerHeight - r.top + 10 + 'px';
-    t.style.top = 'auto';
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    tip.style.bottom = window.innerHeight - r.top + 10 + 'px';
+    tip.style.top = 'auto';
   }
   hideTip() {
     this.tooltip.classList.add('hidden');
@@ -550,54 +541,54 @@ export class UI {
   // ------------------------------------------------------------------ toasts & events
 
   toast(html: string, cls = 'small info', life = 2.4) {
-    const t = el('div', 'toast ' + cls, html);
-    t.style.setProperty('--life', life + 's');
-    this.toasts.append(t);
+    const el_ = el('div', 'toast ' + cls, html);
+    el_.style.setProperty('--life', life + 's');
+    this.toasts.append(el_);
     while (this.toasts.children.length > 4) this.toasts.firstElementChild!.remove();
-    setTimeout(() => t.remove(), (life + 0.7) * 1000);
-    return t;
+    setTimeout(() => el_.remove(), (life + 0.7) * 1000);
+    return el_;
   }
 
   onEvent(ev: GameEvent, g: Game) {
     switch (ev.type) {
       case 'waveStart': {
         const plan = ev.plan;
-        const sub = plan.tag !== 'Night ' + plan.wave ? plan.tag : ev.wave === 1 ? 'They come for the light' : '';
-        this.toast(`<div class="t1">Night ${ev.wave}</div>${sub ? `<div class="t2">${sub}</div>` : ''}`, 'big' + (plan.boss ? ' boss' : ''), 2);
+        const sub = plan.tag ? t(plan.tag) : ev.wave === 1 ? t('toast.firstNight') : '';
+        this.toast(`<div class="t1">${t('toast.night', { n: ev.wave })}</div>${sub ? `<div class="t2">${sub}</div>` : ''}`, 'big' + (plan.boss ? ' boss' : ''), 2);
         if (plan.newEnemy) {
           const id = plan.newEnemy;
-          const t = this.toast(`<div><div class="t1">New foe: ${ENEMIES[id].name}</div><div class="t2">${ENEMY_LORE[id]}</div></div>`, 'intro', 5);
-          t.prepend(cachedIcon(id, 48));
+          const intro = this.toast(`<div><div class="t1">${t('toast.newFoe', { name: ename(id) })}</div><div class="t2">${elore(id)}</div></div>`, 'intro', 5);
+          intro.prepend(cachedIcon(id, 48));
         }
         this.last.preview = null;
         break;
       }
       case 'waveClear':
-        if (!g.over) this.toast(`Night ${ev.wave} survived &nbsp;<span style="color:var(--aether)">+${ev.bonus}◆</span>`, 'small info', 2.6);
+        if (!g.over) this.toast(`${t('toast.survived', { n: ev.wave })} &nbsp;<span style="color:var(--aether)">+${ev.bonus}◆</span>`, 'small info', 2.6);
         this.last.preview = null;
         break;
       case 'riftOpen':
-        this.toast('A new rift tears open!', 'small err', 3);
+        this.toast(t('toast.rift'), 'small err', 3);
         break;
       case 'bossSpawn':
-        this.toast(`<div class="t1">${ENEMIES[ev.enemy].name}</div><div class="t2">${ENEMY_LORE[ev.enemy]}</div>`, 'big boss', 3);
+        this.toast(`<div class="t1">${ename(ev.enemy)}</div><div class="t2">${elore(ev.enemy)}</div>`, 'big boss', 3);
         break;
       case 'coreUp': {
-        const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === ev.level + 1).map((id) => BUILDINGS[id].name);
+        const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === ev.level + 1).map(bname);
         this.toast(
-          `<div class="t1">The Beacon Ascends</div><div class="t2">${unlocks.length ? 'Unlocked: ' + unlocks.join(' · ') : 'Level ' + (ev.level + 1)}</div>`,
+          `<div class="t1">${t('toast.ascend')}</div><div class="t2">${unlocks.length ? t('toast.unlocked', { list: unlocks.join(' · ') }) : t('toast.level', { n: ev.level + 1 })}</div>`,
           'big',
           2.8,
         );
         break;
       }
       case 'destroyed':
-        this.toast(`${BUILDINGS[ev.id].name} destroyed!`, 'small err', 1.8);
+        this.toast(t('toast.destroyed', { name: bname(ev.id) }), 'small err', 1.8);
         break;
       case 'error': {
         const now = performance.now();
         if (ev.msg !== this.lastErr || now - this.lastErrT > 1200) {
-          this.toast(ev.msg, 'small err', 1.4);
+          this.toast(t(ev.msg, ev.vars), 'small err', 1.4);
           this.lastErr = ev.msg;
           this.lastErrT = now;
         }
@@ -608,7 +599,9 @@ export class UI {
 
   // ------------------------------------------------------------------ screens
 
-  private showScreen(card: HTMLElement, dismissOnBackdrop = false) {
+  private screenKind: (() => void) | null = null;
+
+  private showScreen(card: HTMLElement, dismissOnBackdrop = false, redraw: (() => void) | null = null) {
     this.closeScreen();
     const s = el('div', 'screen');
     s.append(card);
@@ -621,31 +614,52 @@ export class UI {
       });
     this.root.append(s);
     this.screen = s;
+    this.screenKind = redraw;
   }
 
   closeScreen() {
     this.screen?.remove();
     this.screen = null;
+    this.screenKind = null;
   }
 
   get screenOpen() {
     return !!this.screen;
   }
 
+  /** Rebuild all DOM text after a language change, keeping the current screen open. */
+  relocalize() {
+    const hudVisible = this.hud[0]?.style.display !== 'none';
+    const redraw = this.screenKind;
+    for (const h of [...this.hud, this.toasts, this.tooltip]) h.remove();
+    this.buildBtns.clear();
+    this.hud = [];
+    this.buildHud();
+    this.setHudVisible(hudVisible);
+    this.last = {};
+    if (redraw) redraw();
+  }
+
+  private secondary(label: string): HTMLButtonElement {
+    const b = el('button', 'big-btn alt', label) as HTMLButtonElement;
+    return b;
+  }
+
   showTitle() {
     this.hideTip();
     const card = el('div', 'card glass');
-    card.append(el('div', 'logo', 'LUMEN'), el('div', 'tagline', 'Hold the light through thirty nights'));
+    card.append(el('div', 'logo', 'LUMENRIFT'), el('div', 'tagline', t('title.tagline')));
     const best = loadBest();
     const diffs = el('div', 'diffs');
     let chosen: Difficulty = this.app.difficulty;
     const cards: HTMLElement[] = [];
     (Object.keys(DIFFICULTY) as Difficulty[]).forEach((d) => {
-      const D = DIFFICULTY[d];
       const c = el('button', 'diff' + (d === chosen ? ' sel' : ''));
-      c.innerHTML = `<div class="dn">${D.label}</div><div class="dd">${D.desc}</div><div class="best">${best[d] ? 'Best: night ' + best[d] + (best[d]! >= VICTORY_WAVE ? ' ☀' : '') : ''}</div>`;
+      const b = best[d];
+      c.innerHTML = `<div class="dn">${t(`diff.${d}.label` as StringKey)}</div><div class="dd">${t(`diff.${d}.desc` as StringKey)}</div><div class="best">${b ? t('title.best', { n: b }) + (b >= VICTORY_WAVE ? ' ☀' : '') : ''}</div>`;
       c.addEventListener('click', () => {
         chosen = d;
+        this.app.difficulty = d;
         cards.forEach((x) => x.classList.remove('sel'));
         c.classList.add('sel');
         audio.unlock();
@@ -655,98 +669,106 @@ export class UI {
       diffs.append(c);
     });
     card.append(diffs);
-    const go = el('button', 'big-btn', 'Light the Beacon');
+    const go = el('button', 'big-btn', t('title.start'));
     go.addEventListener('click', () => {
       audio.unlock();
       this.app.startGame(chosen);
     });
     card.append(go);
     const links = el('div', 'link-row');
-    const how = el('button', 'link-btn', 'How to play');
+    const how = el('button', 'link-btn', t('title.how'));
     how.addEventListener('click', () => this.showHelp(() => this.showTitle()));
-    const set_ = el('button', 'link-btn', 'Sound settings');
+    const set_ = el('button', 'link-btn', t('title.settings'));
     set_.addEventListener('click', () => this.showSettings(() => this.showTitle()));
-    links.append(how, set_);
+    links.append(how, set_, this.langSelect());
     card.append(links);
-    this.showScreen(card);
+    this.showScreen(card, false, () => this.showTitle());
+  }
+
+  /** Compact language dropdown. */
+  private langSelect(): HTMLElement {
+    const sel = el('select', 'lang-select') as HTMLSelectElement;
+    sel.setAttribute('aria-label', t('settings.language'));
+    for (const l of LANG_ORDER) {
+      const o = el('option', '', LANGS[l]['meta.language'] ?? l) as HTMLOptionElement;
+      o.value = l;
+      o.selected = l === lang();
+      sel.append(o);
+    }
+    sel.addEventListener('change', () => setLang(sel.value as Lang));
+    return sel;
   }
 
   showMenu() {
     if (!this.app.game || this.app.game.over || this.app.inAttract) return;
     this.app.togglePause(true);
     const card = el('div', 'card glass');
-    card.append(el('div', 'over-title win', 'Paused'));
-    card.append(el('div', 'over-sub', `Night ${this.app.game.wave} · ${DIFFICULTY[this.app.game.difficulty].label}`));
+    card.append(el('div', 'over-title win', t('menu.paused')));
+    card.append(el('div', 'over-sub', t('menu.sub', { n: this.app.game.wave, diff: t(`diff.${this.app.game.difficulty}.label` as StringKey) })));
     const col = el('div', '');
     col.style.display = 'grid';
     col.style.gap = '10px';
-    const resume = el('button', 'big-btn', 'Resume');
+    const resume = el('button', 'big-btn', t('menu.resume'));
     resume.addEventListener('click', () => {
       this.closeScreen();
       this.app.togglePause(false);
     });
-    const restart = el('button', 'big-btn alt', 'Restart');
-    restart.className = 'big-btn';
-    restart.style.cssText = 'background:rgba(255,255,255,.07);color:var(--text);box-shadow:none;border:1px solid rgba(255,255,255,.14);font-size:16px';
+    const restart = this.secondary(t('menu.restart'));
     restart.addEventListener('click', () => this.app.restart());
-    const quit = restart.cloneNode() as HTMLButtonElement;
-    quit.textContent = 'Quit to title';
+    const quit = this.secondary(t('menu.quit'));
     quit.addEventListener('click', () => this.app.toTitle());
     col.append(resume, restart, quit);
     card.append(col);
     const links = el('div', 'link-row');
-    const how = el('button', 'link-btn', 'How to play');
+    const how = el('button', 'link-btn', t('title.how'));
     how.addEventListener('click', () => this.showHelp(() => this.showMenu()));
-    const st = el('button', 'link-btn', 'Sound settings');
+    const st = el('button', 'link-btn', t('title.settings'));
     st.addEventListener('click', () => this.showSettings(() => this.showMenu()));
     links.append(how, st);
     card.append(links);
-    this.showScreen(card, true);
+    this.showScreen(card, true, () => this.showMenu());
   }
 
   showHelp(back: () => void) {
     const card = el('div', 'card glass');
     const touch = this.app.touch;
-    card.innerHTML = `<div class="over-title win" style="font-size:30px">How to Play</div>
+    card.innerHTML = `<div class="over-title win" style="font-size:30px">${t('help.title')}</div>
     <div class="help">
-      <p>Shadows crawl out of <b>rifts</b> at the edge of the world and hunt the <b>Beacon</b> at its heart. Every shadow that reaches it dims the light. If the light fails, the night wins. Survive <b>${VICTORY_WAVE} nights</b> to see the dawn.</p>
-      <h3>Building</h3>
+      <p>${t('help.intro', { n: VICTORY_WAVE })}</p>
+      <h3>${t('help.buildH')}</h3>
       <ul>
-        <li>Pick a structure from the bottom bar, then ${touch ? '<b>tap a tile</b> and <b>tap it again</b> to build' : '<b>click</b> a tile (drag to paint walls and traps)'}.</li>
-        <li>Shadows walk the shortest open path, shown by the <b style="color:#ff8adf">pink trail</b>. Use <b>Bulwarks</b> and towers to force a longer route through your killing zone, but you can never seal the path completely.</li>
-        <li><b>Brutes</b> and the <b>Colossus</b> smash through walls instead of going around them. <b>Flyers</b> ignore walls entirely.</li>
-        <li>Build <b>Harvesters</b> on glowing crystal veins. They pay out every night you survive.</li>
-        <li>Ascend the <b>Beacon</b> to unlock stronger structures. Select any structure to upgrade it or sell it. Anything bought during the current build phase is refunded in full.</li>
+        <li>${t(touch ? 'help.build1.touch' : 'help.build1.click')}</li>
+        <li>${t('help.build2')}</li>
+        <li>${t('help.build3')}</li>
+        <li>${t('help.build4')}</li>
+        <li>${t('help.build5')}</li>
       </ul>
-      <h3>Between nights</h3>
-      <p>Build during the countdown, or call the next night early for bonus aether. The panel on the left previews what's coming. Unleash the <b>Nova</b> when shadows get close to the Beacon.</p>
-      ${
-        touch
-          ? '<h3>Touch</h3><p>Drag to pan and pinch to zoom. Tap a structure to select it.</p>'
-          : `<h3>Keys</h3><p><kbd>1</kbd>–<kbd>=</kbd> structures · <kbd>U</kbd> upgrade · <kbd>X</kbd> sell · <kbd>T</kbd> targeting · <kbd>V</kbd> Nova · <kbd>B</kbd> Beacon · <kbd>N</kbd> call night · <kbd>Space</kbd> pause · <kbd>F</kbd> speed · <kbd>M</kbd> mute · Wheel zooms · Right-drag pans</p>`
-      }
-      <h3>Bestiary</h3>
+      <h3>${t('help.betweenH')}</h3>
+      <p>${t('help.between')}</p>
+      ${touch ? `<h3>${t('help.touchH')}</h3><p>${t('help.touch')}</p>` : `<h3>${t('help.keysH')}</h3><p>${t('help.keys')}</p>`}
+      <h3>${t('help.bestiary')}</h3>
       <div class="bestiary"></div>
     </div>`;
     const best = card.querySelector('.bestiary')!;
     for (const id of Object.keys(ENEMIES) as EnemyId[]) {
       const b = el('div', 'b');
       b.append(cachedIcon(id, 36));
-      b.append(el('div', '', `<b>${ENEMIES[id].name}</b>${ENEMY_LORE[id]}`));
+      b.append(el('div', '', `<b>${ename(id)}</b>${elore(id)}`));
       best.append(b);
     }
-    const back_ = el('button', 'big-btn', 'Back');
+    const back_ = el('button', 'big-btn', t('settings.back'));
     back_.style.marginTop = '18px';
     back_.addEventListener('click', back);
     card.append(back_);
-    this.showScreen(card);
+    this.showScreen(card, false, () => this.showHelp(back));
   }
 
   showSettings(back: () => void) {
     const card = el('div', 'card glass');
-    card.append(el('div', 'over-title win', 'Sound'));
+    card.append(el('div', 'over-title win', t('settings.title')));
     card.style.width = 'min(420px, 100%)';
     const s = el('div', 'settings');
+    s.append(el('label', '', t('settings.language')), this.langSelect());
     const slider = (label: string, get: () => number, setv: (v: number) => void) => {
       const i = el('input') as HTMLInputElement;
       i.type = 'range';
@@ -759,8 +781,8 @@ export class UI {
       });
       s.append(el('label', '', label), i);
     };
-    slider('Music', () => audio.musicVolume, (v) => (audio.musicVolume = v));
-    slider('Effects', () => audio.sfxVolume, (v) => {
+    slider(t('settings.music'), () => audio.musicVolume, (v) => (audio.musicVolume = v));
+    slider(t('settings.effects'), () => audio.sfxVolume, (v) => {
       audio.sfxVolume = v;
       audio.play('build');
     });
@@ -768,33 +790,27 @@ export class UI {
     mute.type = 'checkbox';
     mute.checked = audio.muted;
     mute.addEventListener('change', () => (audio.muted = mute.checked));
-    s.append(el('label', '', 'Mute all'), mute);
+    s.append(el('label', '', t('settings.mute')), mute);
     card.append(s);
-    const b = el('button', 'big-btn', 'Back');
+    const b = el('button', 'big-btn', t('settings.back'));
     b.addEventListener('click', back);
     card.append(b);
-    this.showScreen(card);
+    this.showScreen(card, false, () => this.showSettings(back));
   }
 
   showGameOver(g: Game, won: boolean, newBest: boolean) {
     this.hideTip();
     const card = el('div', 'card glass');
-    card.append(el('div', 'over-title' + (won ? ' win' : ''), won ? 'Dawn Breaks' : 'The Light Fades'));
-    card.append(
-      el(
-        'div',
-        'over-sub',
-        won
-          ? `You kept the Beacon alight through ${VICTORY_WAVE} nights.${newBest ? ' A new record!' : ''}`
-          : `The shadows swallowed the Beacon on night ${g.wave}.${newBest ? ' Still, a new record!' : ''}`,
-      ),
-    );
+    card.append(el('div', 'over-title' + (won ? ' win' : ''), t(won ? 'over.win' : 'over.lose')));
+    const sub = won ? t('over.winSub', { n: VICTORY_WAVE }) : t('over.loseSub', { n: g.wave });
+    const rec = newBest ? ' ' + t(won ? 'over.record' : 'over.recordLose') : '';
+    card.append(el('div', 'over-sub', sub + rec));
     const sum = el('div', 'summary');
-    sum.innerHTML = `<div><b>${won ? g.wave : g.wave - 1}</b><span>Nights survived</span></div><div><b>${fmt(g.stats.kills)}</b><span>Shadows banished</span></div><div><b>${fmt(g.stats.earned)}</b><span>Aether earned</span></div>`;
+    sum.innerHTML = `<div><b>${won ? g.wave : g.wave - 1}</b><span>${t('over.nights')}</span></div><div><b>${fmt(g.stats.kills)}</b><span>${t('over.kills')}</span></div><div><b>${fmt(g.stats.earned)}</b><span>${t('over.earned')}</span></div>`;
     card.append(sum);
     const row = el('div', 'row-btns');
     if (won) {
-      const cont = el('button', 'big-btn', 'Endless night');
+      const cont = el('button', 'big-btn', t('over.endless'));
       cont.style.fontSize = '16px';
       cont.addEventListener('click', () => {
         this.closeScreen();
@@ -802,13 +818,13 @@ export class UI {
       });
       row.append(cont);
     }
-    const again = el('button', 'big-btn' + (won ? ' alt' : ''), 'Try again');
+    const again = el('button', 'big-btn' + (won ? ' alt' : ''), t('over.again'));
     again.addEventListener('click', () => this.app.restart());
-    const title = el('button', 'big-btn alt', 'Title');
+    const title = el('button', 'big-btn alt', t('over.title'));
     title.addEventListener('click', () => this.app.toTitle());
     row.append(again, title);
     card.append(row);
-    this.showScreen(card);
+    this.showScreen(card, false, () => this.showGameOver(g, won, newBest));
   }
 }
 
@@ -820,28 +836,32 @@ function set(ui: UI, key: string, v: unknown, fn: () => void) {
   }
 }
 
+export const bname = (id: BuildingId) => t(`b.${id}.name` as StringKey);
+export const ename = (id: EnemyId) => t(`e.${id}.name` as StringKey);
+export const elore = (id: EnemyId) => t(`e.${id}.lore` as StringKey);
+
 function statsList(L: LevelStats, N: LevelStats | null, hp?: number): HTMLElement {
   const dl = el('dl', 'stats');
-  const row = (k: string, v: number | undefined, nv: number | undefined, fmtv: (n: number) => string = (n) => String(n)) => {
+  const row = (k: StringKey, v: number | undefined, nv: number | undefined, fmtv: (n: number) => string = (n) => String(n)) => {
     if (v === undefined || (v === 0 && !nv)) return;
     const up = N && nv !== undefined && nv !== v ? `<span class="up">→ ${fmtv(nv)}</span>` : '';
-    dl.append(el('dt', '', k), el('dd', '', fmtv(v) + up));
+    dl.append(el('dt', '', t(k)), el('dd', '', fmtv(v) + up));
   };
   const pct = (n: number) => Math.round(n * 100) + '%';
   const one = (n: number) => (Math.round(n * 10) / 10).toString();
-  row('Damage', L.damage, N?.damage);
-  if (L.rate && L.damage) row('DPS', L.damage * L.rate * (L.shots ?? 1), N ? (N.damage ?? 0) * (N.rate ?? 0) * (N.shots ?? 1) : undefined, one);
-  row('Range', L.range, N?.range, one);
-  row('Splash', L.splash, N?.splash, one);
-  row('Chain', L.chain, N?.chain);
-  row('Missiles', L.shots, N?.shots);
-  row('Slow', L.slow, N?.slow, pct);
-  row('Burn', L.burn, N?.burn);
-  row('Heal/s', L.heal, N?.heal);
-  row('Income', L.income, N?.income);
+  row('stat.damage', L.damage, N?.damage);
+  if (L.rate && L.damage) row('stat.dps', L.damage * L.rate * (L.shots ?? 1), N ? (N.damage ?? 0) * (N.rate ?? 0) * (N.shots ?? 1) : undefined, one);
+  row('stat.range', L.range, N?.range, one);
+  row('stat.splash', L.splash, N?.splash, one);
+  row('stat.chain', L.chain, N?.chain);
+  row('stat.missiles', L.shots, N?.shots);
+  row('stat.slow', L.slow, N?.slow, pct);
+  row('stat.burn', L.burn, N?.burn);
+  row('stat.heal', L.heal, N?.heal);
+  row('stat.income', L.income, N?.income);
   if (L.hp > 1) {
     const cur = hp !== undefined ? `${Math.ceil(hp)} / ${L.hp}` : String(L.hp);
-    dl.append(el('dt', '', 'Health'), el('dd', '', cur + (N && N.hp !== L.hp ? `<span class="up">→ ${N.hp}</span>` : '')));
+    dl.append(el('dt', '', t('stat.health')), el('dd', '', cur + (N && N.hp !== L.hp ? `<span class="up">→ ${N.hp}</span>` : '')));
   }
   return dl;
 }

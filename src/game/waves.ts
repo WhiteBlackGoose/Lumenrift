@@ -1,4 +1,5 @@
 import { DIFFICULTY, Difficulty, ENEMIES, EnemyId, RIFT_SCHEDULE, waveBudget } from './config';
+import type { StringKey } from '../i18n/en';
 import { Rng } from './rng';
 
 export interface WaveSpawn {
@@ -12,7 +13,8 @@ export interface WaveSpawn {
 export interface WavePlan {
   wave: number;
   spawns: WaveSpawn[];
-  tag: string;
+  /** Special name for themed nights, or null for an ordinary night. */
+  tag: StringKey | null;
   boss: boolean;
   newEnemy: EnemyId | null;
   counts: Partial<Record<EnemyId, number>>;
@@ -45,7 +47,7 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
   const counts: Partial<Record<EnemyId, number>> = {};
   const pool = REGULAR.filter((id) => ENEMIES[id].firstWave <= wave);
   const newEnemy = REGULAR.find((id) => ENEMIES[id].firstWave === wave) ?? null;
-  let tag = 'Night ' + wave;
+  let tag: StringKey | null = null;
   let boss = false;
   let t = 0;
   let riftCursor = rng.int(0, rifts - 1);
@@ -61,7 +63,7 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
   if (wave % 10 === 0) {
     boss = true;
     const bossId: EnemyId = wave % 20 === 0 ? 'wyrm' : 'colossus';
-    tag = bossId === 'wyrm' ? 'The Night Wyrm' : 'The Gloom Colossus';
+    tag = bossId === 'wyrm' ? 'wave.wyrm' : 'wave.colossus';
     budget *= 0.55;
     // escorts first, boss arrives a bit later
     t = 0;
@@ -70,26 +72,26 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
     if (wave >= 30) {
       addGroup(bossId === 'wyrm' ? 'colossus' : 'wyrm', 1, 0);
       budget += 60;
-      tag = 'Eclipse';
+      tag = 'wave.eclipse';
     }
     t = 3;
   } else if (wave % 5 === 0 && wave >= 5) {
     const themes = ['air', 'swarm', 'siege'] as const;
     const theme = themes[(wave / 5 - 1) % 3];
     if (theme === 'air') {
-      tag = 'Wings in the Dark';
+      tag = 'wave.air';
       while (budget > ENEMIES.wraith.threat * 3) {
         const n = Math.min(rng.int(4, 9), Math.floor(budget / ENEMIES.wraith.threat));
         t += addGroup('wraith', n, 0.55) + rng.range(1.5, 3.5);
       }
     } else if (theme === 'swarm') {
-      tag = 'The Swarm';
+      tag = 'wave.swarm';
       while (budget > 3) {
         const n = Math.min(rng.int(10, 20), Math.floor(budget / ENEMIES.skitter.threat));
         t += addGroup('skitter', n, 0.22) + rng.range(1.5, 3);
       }
     } else {
-      tag = 'Siege';
+      tag = 'wave.siege';
       while (budget > ENEMIES.brute.threat) {
         const n = Math.min(rng.int(2, 4), Math.floor(budget / ENEMIES.brute.threat));
         t += addGroup('brute', n, 1.4) + rng.range(2, 4);

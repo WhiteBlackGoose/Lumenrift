@@ -10,7 +10,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? 
 const errors = [];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function page(viewport, touch = false) {
-  const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch });
+  const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch, locale: 'en-US' });
   const p = await ctx.newPage();
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   p.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + e.stack));

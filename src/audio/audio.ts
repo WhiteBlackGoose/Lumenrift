@@ -1,4 +1,4 @@
-// Procedural WebAudio engine for LUMEN: synthesized SFX + generative ambient score.
+// Procedural WebAudio engine for LUMENRIFT: synthesized SFX + generative ambient score.
 // Everything is created lazily on unlock(); before that every call is a no-op.
 
 export type SfxName =

@@ -16,7 +16,7 @@ const browser = await chromium.launch({
 const errors = [];
 
 async function page(viewport, touch = false) {
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: touch, isMobile: touch });
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: touch, isMobile: touch, locale: 'en-US' });
   const p = await ctx.newPage();
   p.on('console', (m) => {
     if (m.type() === 'error' || m.type() === 'warning') errors.push(`[${m.type()}] ${m.text()}`);

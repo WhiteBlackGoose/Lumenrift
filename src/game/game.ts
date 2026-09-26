@@ -25,6 +25,7 @@ import {
   VICTORY_WAVE,
 } from './config';
 import { computeFlow, DIRS, generateMap, idx, inBounds, INF, isCoreTile, MapData, Terrain } from './grid';
+import type { StringKey } from '../i18n/en';
 import { Rng } from './rng';
 import { planWave, riftsOpenAt, WavePlan, WaveSpawn } from './waves';
 
@@ -143,13 +144,14 @@ export type GameEvent =
   | { type: 'heal'; x: number; y: number }
   | { type: 'thorns'; x: number; y: number }
   | { type: 'frost'; x: number; y: number; r: number }
-  | { type: 'error'; msg: string }
+  | { type: 'error'; msg: StringKey; vars?: Record<string, string | number> }
   | { type: 'defeat' }
   | { type: 'victory' };
 
 export interface PlaceCheck {
   ok: boolean;
-  reason?: string;
+  reason?: StringKey;
+  vars?: Record<string, number>;
 }
 
 const DT = 1 / 60;
@@ -290,23 +292,23 @@ export class Game {
 
   canPlace(id: BuildingId, x: number, y: number): PlaceCheck {
     const def = BUILDINGS[id];
-    if (!inBounds(x, y)) return { ok: false, reason: 'Out of bounds' };
-    if (!this.isUnlocked(id)) return { ok: false, reason: `Requires Beacon level ${def.tier}` };
+    if (!inBounds(x, y)) return { ok: false, reason: 'err.bounds' };
+    if (!this.isUnlocked(id)) return { ok: false, reason: 'err.locked', vars: { n: def.tier } };
     const i = idx(x, y);
     const t = this.map.terrain[i];
-    if (t === Terrain.Rock) return { ok: false, reason: 'Rock in the way' };
-    if (t === Terrain.Core) return { ok: false, reason: 'That is the Beacon' };
-    if (t === Terrain.Rift) return { ok: false, reason: 'Cannot build on a rift' };
-    if (this.buildingAt[i]) return { ok: false, reason: 'Occupied' };
-    if (def.onlyOn === 'crystal' && t !== Terrain.Crystal) return { ok: false, reason: 'Must be built on a crystal vein' };
-    if (this.money < def.levels[0].cost) return { ok: false, reason: 'Not enough aether' };
+    if (t === Terrain.Rock) return { ok: false, reason: 'err.rock' };
+    if (t === Terrain.Core) return { ok: false, reason: 'err.core' };
+    if (t === Terrain.Rift) return { ok: false, reason: 'err.rift' };
+    if (this.buildingAt[i]) return { ok: false, reason: 'err.occupied' };
+    if (def.onlyOn === 'crystal' && t !== Terrain.Crystal) return { ok: false, reason: 'err.crystal' };
+    if (this.money < def.levels[0].cost) return { ok: false, reason: 'err.money' };
     if (def.blocks) {
       for (const e of this.enemies) {
         if (e.def.flying || e.dead) continue;
         if (Math.abs(e.x - (x + 0.5)) < 0.5 + e.def.radius && Math.abs(e.y - (y + 0.5)) < 0.5 + e.def.radius)
-          return { ok: false, reason: 'Enemy in the way' };
+          return { ok: false, reason: 'err.enemy' };
       }
-      if (!this.pathStillOpen(i)) return { ok: false, reason: 'Would seal the path to the Beacon' };
+      if (!this.pathStillOpen(i)) return { ok: false, reason: 'err.seal' };
     }
     return { ok: true };
   }
@@ -327,7 +329,7 @@ export class Game {
   place(id: BuildingId, x: number, y: number): Building | null {
     const chk = this.canPlace(id, x, y);
     if (!chk.ok) {
-      this.events.push({ type: 'error', msg: chk.reason! });
+      this.events.push({ type: 'error', msg: chk.reason!, vars: chk.vars });
       return null;
     }
     const def = BUILDINGS[id];
@@ -367,7 +369,7 @@ export class Game {
     const cost = this.upgradeCost(b);
     if (cost === null) return false;
     if (this.money < cost) {
-      this.events.push({ type: 'error', msg: 'Not enough aether' });
+      this.events.push({ type: 'error', msg: 'err.money' });
       return false;
     }
     this.money -= cost;
@@ -402,7 +404,7 @@ export class Game {
     const cost = this.coreUpgradeCost();
     if (cost === null) return false;
     if (this.money < cost) {
-      this.events.push({ type: 'error', msg: 'Not enough aether' });
+      this.events.push({ type: 'error', msg: 'err.money' });
       return false;
     }
     this.money -= cost;
