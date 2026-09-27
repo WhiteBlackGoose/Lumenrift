@@ -8,6 +8,8 @@ export const uk: Dict = {
   'title.how': 'Як грати',
   'title.settings': 'Налаштування',
   'title.best': 'Рекорд: ніч {n}',
+  'about.source': "Вихідний код на GitHub",
+  'about.license': "Вільно: суспільне надбання (CC0)",
   'saves.title': "Продовжити",
   'saves.newGame': "Нова гра",
   'saves.resume': "Продовжити",

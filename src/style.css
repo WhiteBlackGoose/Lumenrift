@@ -1628,3 +1628,29 @@ body.touch #build-bar {
 .save-diff.d-sandbox {
   color: #9dffb4;
 }
+
+/* ------------------------------------------------------------------ about footer */
+.about {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.about a {
+  color: var(--text-faint);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.about a:hover {
+  color: var(--text);
+}
+.about svg {
+  width: 14px;
+  height: 14px;
+}

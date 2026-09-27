@@ -8,6 +8,8 @@ export const de: Dict = {
   'title.how': 'Spielanleitung',
   'title.settings': 'Optionen',
   'title.best': 'Bestleistung: Nacht {n}',
+  'about.source': "Quellcode auf GitHub",
+  'about.license': "Frei nutzbar: gemeinfrei (CC0)",
   'saves.title': "Weiterspielen",
   'saves.newGame': "Neues Spiel",
   'saves.resume': "Fortsetzen",

@@ -9,6 +9,8 @@ export const en = {
   'title.how': 'How to play',
   'title.settings': 'Settings',
   'title.best': 'Best: night {n}',
+  'about.source': "Source on GitHub",
+  'about.license': "Free to use: public domain (CC0)",
   'saves.title': "Continue",
   'saves.newGame': "New game",
   'saves.resume': "Resume",

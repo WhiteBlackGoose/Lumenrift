@@ -9,6 +9,8 @@ export const hy: Dict = {
   'title.how': 'Ինչպես խաղալ',
   'title.settings': 'Կարգավորումներ',
   'title.best': 'Լավագույնը՝ գիշեր {n}',
+  'about.source': "Սկզբնական կոդը GitHub-ում",
+  'about.license': "Ազատ օգտագործում՝ հանրային սեփականություն (CC0)",
   'saves.title': "Շարունակել",
   'saves.newGame': "Նոր խաղ",
   'saves.resume': "Շարունակել",

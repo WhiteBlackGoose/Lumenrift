@@ -1,6 +1,8 @@
 {
   "name": "lumenrift",
   "private": true,
+  "license": "CC0-1.0",
+  "repository": "github:WhiteBlackGoose/Lumenrift",
   "version": "0.1.0",
   "type": "module",
   "scripts": {

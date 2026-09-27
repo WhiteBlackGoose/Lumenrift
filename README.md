@@ -239,3 +239,7 @@ CHROMIUM=$(which chromium) node scripts/sessions.mjs http://localhost:5173/ # sa
 ```
 
 Every push to `main` is built and deployed to GitHub Pages by `.github/workflows/deploy.yml`.
+
+## License
+
+LUMENRIFT is dedicated to the **public domain** under [CC0 1.0 Universal](LICENSE). The code, art, music, translations, everything. You can copy, modify, remix and distribute it, including commercially, without asking permission or giving credit (though a link back is always appreciated).

@@ -724,7 +724,7 @@ export class UI {
     const set_ = el('button', 'link-btn', t('title.settings'));
     set_.addEventListener('click', () => this.showSettings(() => this.showTitle()));
     links.append(how, set_, this.langSelect());
-    card.append(links);
+    card.append(links, aboutFooter());
     this.showScreen(card, false, () => this.showTitle());
   }
 
@@ -791,7 +791,7 @@ export class UI {
     this.app.togglePause(true);
     const card = el('div', 'card glass');
     card.append(el('div', 'over-title win', t('menu.paused')));
-    card.append(el('div', 'over-sub', t('menu.sub', { n: this.app.game.wave, diff: t(`diff.${this.app.game.difficulty}.label` as StringKey) })));
+    card.append(el('div', 'over-sub', t('menu.sub', { n: this.app.game.phase === 'build' ? this.app.game.wave + 1 : this.app.game.wave, diff: t(`diff.${this.app.game.difficulty}.label` as StringKey) })));
     const col = el('div', '');
     col.style.display = 'grid';
     col.style.gap = '10px';
@@ -812,7 +812,7 @@ export class UI {
     const st = el('button', 'link-btn', t('title.settings'));
     st.addEventListener('click', () => this.showSettings(() => this.showMenu()));
     links.append(how, st);
-    card.append(links);
+    card.append(links, aboutFooter());
     this.showScreen(card, true, () => this.showMenu());
   }
 
@@ -921,6 +921,19 @@ function set(ui: UI, key: string, v: unknown, fn: () => void) {
     last[key] = v;
     fn();
   }
+}
+
+const REPO_URL = 'https://github.com/WhiteBlackGoose/Lumenrift';
+
+/** Small footer: link to the source and the CC0 dedication. */
+function aboutFooter(): HTMLElement {
+  const f = el('div', 'about');
+  f.innerHTML =
+    `<a href="${REPO_URL}" target="_blank" rel="noopener">` +
+    `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>` +
+    `${t('about.source')}</a><span>·</span>` +
+    `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">${t('about.license')}</a>`;
+  return f;
 }
 
 /** "5 minutes ago" / "vor 2 Stunden" in the current language; plain date after a week. */
