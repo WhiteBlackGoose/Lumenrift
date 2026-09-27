@@ -16,6 +16,12 @@ export const it: Dict = {
   'diff.normal.desc': 'La sfida pensata per te.',
   'diff.nightmare.label': 'Incubo',
   'diff.nightmare.desc': "Per chi ha già visto l'alba.",
+  'diff.sandbox.label': "Sandbox",
+  'diff.sandbox.desc': "Etere infinito, nessuna sconfitta. Scegli qualsiasi notte e sperimenta.",
+  'sandbox.prev': "Notte precedente",
+  'sandbox.next': "Notte successiva",
+  'hud.free': "Gratis",
+  'sandbox.hint': "Sandbox: tutto è gratis e il Faro non può cadere. Scegli la notte con ◀ ▶ nel pannello in alto a sinistra.",
 
   'hud.coreTip': 'Il Faro. Se la sua luce si spegne, la notte vince. Clicca per potenziarlo.',
   'hud.moneyTip': 'Etere — ottenuto bandendo le ombre, sopravvivendo alle notti e raccogliendo cristallo.',
@@ -124,7 +130,7 @@ export const it: Dict = {
   'help.between':
     'Costruisci durante il conto alla rovescia, oppure evoca la notte successiva in anticipo per etere bonus. Il pannello a sinistra anticipa cosa sta per arrivare. Scatena la <b>Nova</b> quando le ombre si avvicinano al Faro.',
   'help.touchH': 'Tocco',
-  'help.touch': 'Trascina per spostare la visuale e pizzica per zoomare. Tocca una struttura per selezionarla.',
+  'help.touch': 'Trascina per spostare la visuale e pizzica per zoomare. Tocca una struttura per selezionarla. Tocca il Faro (o la sua barra della salute) per farlo ascendere o scatenare la Nova.',
   'help.keysH': 'Tasti',
   'help.keys':
     '<kbd>1</kbd>–<kbd>=</kbd> strutture · <kbd>U</kbd> potenzia · <kbd>X</kbd> vendi · <kbd>T</kbd> bersaglio · <kbd>V</kbd> Nova · <kbd>B</kbd> Faro · <kbd>N</kbd> evoca notte · <kbd>Space</kbd> pausa · <kbd>F</kbd> velocità · <kbd>M</kbd> silenzia · Wheel zooms · Right-drag pans',

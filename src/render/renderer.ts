@@ -85,7 +85,7 @@ export class Renderer {
     this.cam.shake = 0;
   }
 
-  resize(w: number, h: number, insetTop: number, insetBottom: number) {
+  resize(w: number, h: number, insetTop: number, insetBottom: number, insetLeft = 0) {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
@@ -93,7 +93,7 @@ export class Renderer {
     this.canvas.style.height = h + 'px';
     this.light.width = Math.ceil(w / 2);
     this.light.height = Math.ceil(h / 2);
-    this.cam.resize(w, h, insetTop, insetBottom);
+    this.cam.resize(w, h, insetTop, insetBottom, insetLeft);
     this.ground = null; // re-render at the new resolution
   }
 

@@ -29,6 +29,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 - 🌗 **Dynamic lighting.** The world is dark. Your towers are the light.
 - 🎵 **Procedural audio.** Synthesized sound effects and an adaptive generative score that swells when the shadows come.
 - 📱 **Desktop and mobile, installable as an app.** Mouse and keyboard, or touch with pinch-zoom. Add it to your home screen and it runs fullscreen and works offline.
+- 🧪 **Sandbox mode.** Free building, an unbreakable Beacon, and a picker to jump to any night. Handy for testing mazes against a boss.
 - 🌍 **8 languages:** English, Deutsch, Español, Français, Italiano, Русский, Українська, Հայերեն. The game picks your system language automatically, and you can switch any time.
 
 ## Screenshots
@@ -106,7 +107,7 @@ LUMENRIFT is a Progressive Web App: it can be installed from the browser, launch
 | Build | <kbd>1</kbd>…<kbd>=</kbd> or click the bar, then click a tile (drag to paint walls and traps) | Tap the bar, tap a tile, tap it again to confirm |
 | Select | Click a structure or the Beacon | Tap |
 | Upgrade / sell / targeting | <kbd>U</kbd> / <kbd>X</kbd> / <kbd>T</kbd> | Buttons in the panel |
-| Nova / Beacon | <kbd>V</kbd> / <kbd>B</kbd> | Buttons at bottom right |
+| Nova / Beacon | <kbd>V</kbd> / <kbd>B</kbd> | Tap the Beacon (or its health bar) |
 | Call night · pause · speed · mute | <kbd>N</kbd> · <kbd>Space</kbd> · <kbd>F</kbd> · <kbd>M</kbd> | Buttons at the top |
 | Camera | Wheel to zoom, right- or middle-drag to pan | Pinch and drag |
 
@@ -232,6 +233,7 @@ Browser smoke tests (needs a running dev server and a Chromium binary):
 ```bash
 CHROMIUM=$(which chromium) node scripts/shot.mjs http://localhost:5173/
 CHROMIUM=$(which chromium) node scripts/flow.mjs http://localhost:5173/
+CHROMIUM=$(which chromium) node scripts/mobile.mjs http://localhost:5173/   # phone layouts: overlap/overflow audit
 ```
 
 Every push to `main` is built and deployed to GitHub Pages by `.github/workflows/deploy.yml`.

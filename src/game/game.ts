@@ -174,6 +174,8 @@ export class Game {
   flowVersion = 0;
 
   money = START_MONEY;
+  /** Sandbox mode: everything is free, the Beacon can't fall, nights start only when called. */
+  readonly sandbox: boolean;
   coreLevel = 0;
   coreHp = CORE_LEVELS[0].hp;
   coreCd = 0;
@@ -207,6 +209,11 @@ export class Game {
     this.map = generateMap(seed);
     this.buildingAt = new Int32Array(MAP_W * MAP_H);
     this.money = Math.round(START_MONEY * DIFFICULTY[difficulty].money);
+    this.sandbox = difficulty === 'sandbox';
+    if (this.sandbox) {
+      this.buildTimer = Infinity; // nights only start when called
+      this.novaCd = 0;
+    }
     this.recomputeFlow();
     this.nextPlan = planWave(1, difficulty, seed);
   }
@@ -301,7 +308,7 @@ export class Game {
     if (t === Terrain.Rift) return { ok: false, reason: 'err.rift' };
     if (this.buildingAt[i]) return { ok: false, reason: 'err.occupied' };
     if (def.onlyOn === 'crystal' && t !== Terrain.Crystal) return { ok: false, reason: 'err.crystal' };
-    if (this.money < def.levels[0].cost) return { ok: false, reason: 'err.money' };
+    if (!this.canAfford(def.levels[0].cost)) return { ok: false, reason: 'err.money' };
     if (def.blocks) {
       for (const e of this.enemies) {
         if (e.def.flying || e.dead) continue;
@@ -334,7 +341,7 @@ export class Game {
     }
     const def = BUILDINGS[id];
     const L = def.levels[0];
-    this.money -= L.cost;
+    this.spend(L.cost);
     const b: Building = {
       uid: this.uidSeq++,
       def,
@@ -368,11 +375,11 @@ export class Game {
   upgrade(b: Building): boolean {
     const cost = this.upgradeCost(b);
     if (cost === null) return false;
-    if (this.money < cost) {
+    if (!this.canAfford(cost)) {
       this.events.push({ type: 'error', msg: 'err.money' });
       return false;
     }
-    this.money -= cost;
+    this.spend(cost);
     b.level++;
     b.invested += cost;
     if (this.phase === 'build') b.freshSpend += cost;
@@ -403,16 +410,33 @@ export class Game {
   upgradeCore(): boolean {
     const cost = this.coreUpgradeCost();
     if (cost === null) return false;
-    if (this.money < cost) {
+    if (!this.canAfford(cost)) {
       this.events.push({ type: 'error', msg: 'err.money' });
       return false;
     }
-    this.money -= cost;
+    this.spend(cost);
     const oldMax = this.coreMaxHp;
     this.coreLevel++;
     this.coreHp = Math.min(this.coreMaxHp, this.coreHp + (this.coreMaxHp - oldMax) + this.coreMaxHp * 0.25);
     this.events.push({ type: 'coreUp', level: this.coreLevel });
     return true;
+  }
+
+  canAfford(cost: number): boolean {
+    return this.sandbox || this.money >= cost;
+  }
+
+  private spend(cost: number) {
+    if (!this.sandbox) this.money -= cost;
+  }
+
+  /** Sandbox only: choose which night comes next (during the build phase). */
+  setNextWave(n: number) {
+    if (!this.sandbox || this.phase !== 'build') return;
+    n = Math.max(1, Math.min(99, Math.round(n)));
+    this.wave = n - 1;
+    this.nextPlan = planWave(n, this.difficulty, this.seed);
+    this.recomputeFlow();
   }
 
   cycleMode(b: Building) {
@@ -421,7 +445,7 @@ export class Game {
 
   callWaveNow() {
     if (this.phase !== 'build' || this.over) return;
-    const bonus = Math.floor(this.buildTimer * EARLY_CALL_BONUS);
+    const bonus = this.sandbox ? 0 : Math.floor(this.buildTimer * EARLY_CALL_BONUS);
     if (bonus > 0) {
       this.money += bonus;
       this.stats.earned += bonus;
@@ -432,7 +456,7 @@ export class Game {
 
   nova(): boolean {
     if (this.novaCd > 0 || this.over) return false;
-    this.novaCd = NOVA_COOLDOWN;
+    this.novaCd = this.sandbox ? 5 : NOVA_COOLDOWN;
     const cx = CORE_X + 0.5,
       cy = CORE_Y + 0.5;
     for (const e of this.enemies) {
@@ -508,7 +532,7 @@ export class Game {
 
   private endWave() {
     this.phase = 'build';
-    this.buildTimer = BUILD_TIME;
+    this.buildTimer = this.sandbox ? Infinity : BUILD_TIME;
     let bonus = Math.round((20 + this.wave * 4) * DIFFICULTY[this.difficulty].money);
     for (const b of this.buildings) {
       const inc = this.stats_(b).income;
@@ -521,7 +545,7 @@ export class Game {
     this.stats.earned += bonus;
     this.events.push({ type: 'waveClear', wave: this.wave, bonus });
     this.nextPlan = planWave(this.wave + 1, this.difficulty, this.seed);
-    if (this.wave >= VICTORY_WAVE && !this.won && !this.endless) {
+    if (this.wave >= VICTORY_WAVE && !this.won && !this.endless && !this.sandbox) {
       this.won = true;
       this.over = true;
       this.events.push({ type: 'victory' });
@@ -746,6 +770,10 @@ export class Game {
     this.coreHurt = 0.3;
     this.stats.leaked += dmg;
     this.events.push({ type: 'coreHit', x, y, dmg });
+    if (this.sandbox && this.coreHp <= 0) {
+      this.coreHp = this.coreMaxHp; // the sandbox Beacon rekindles instead of falling
+      return;
+    }
     if (this.coreHp <= 0 && !this.over) {
       this.coreHp = 0;
       this.over = true;

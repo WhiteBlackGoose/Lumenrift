@@ -263,9 +263,15 @@ export class UI {
   }
 
   /** Height of the top and bottom HUD bands, so the camera can avoid them. */
-  insets(): { top: number; bottom: number } {
-    const small = window.innerWidth <= 640 || window.innerHeight <= 500;
-    return { top: small ? 52 : 70, bottom: small ? 82 : 104 };
+  insets(): { top: number; bottom: number; left: number } {
+    const top = document.getElementById('hud-top');
+    const bottom = document.getElementById('hud-bottom');
+    const tr = top?.getBoundingClientRect();
+    const br = bottom?.getBoundingClientRect();
+    const topIn = tr && tr.height ? tr.bottom + 6 : 70;
+    // phone landscape: the build bar becomes a vertical strip on the left
+    if (br && br.height > br.width) return { top: topIn, bottom: 6, left: br.right + 6 };
+    return { top: topIn, bottom: br && br.height ? Math.max(0, window.innerHeight - br.top) + 6 : 104, left: 0 };
   }
 
   // ------------------------------------------------------------------ per-frame
@@ -285,14 +291,19 @@ export class UI {
       this.coreNum.textContent = `${Math.ceil(g.coreHp)} / ${g.coreMaxHp}`;
       this.coreStat.classList.toggle('low', hpF < 0.3);
     });
-    const m = Math.floor(g.money);
+    const m = g.sandbox ? -1 : Math.floor(g.money);
     set('money', m, () => {
-      this.money.innerHTML = gem + fmt(m);
+      this.money.innerHTML = gem + (g.sandbox ? '∞' : fmt(m));
     });
     const shownWave = g.phase === 'build' && !g.over ? g.wave + 1 : g.wave;
     set('night', shownWave, () => (this.nightN.textContent = String(shownWave)));
 
-    if (g.phase === 'build') {
+    if (g.phase === 'build' && g.sandbox) {
+      set('call', 'sandbox', () => {
+        this.callBtn.className = 'call-btn';
+        this.callBtn.innerHTML = `<span class="txt">${t('hud.callNight')}</span><span class="time">▸</span>`;
+      });
+    } else if (g.phase === 'build') {
       const secs = Math.ceil(g.buildTimer);
       const bonus = Math.floor(g.buildTimer * 1.5);
       set('call', 'b' + secs + ':' + bonus, () => {
@@ -318,7 +329,7 @@ export class UI {
       const def = BUILDINGS[id];
       const unlocked = g.isUnlocked(id);
       const cost = def.levels[0].cost;
-      const poor = g.money < cost;
+      const poor = !g.canAfford(cost);
       const active = this.app.placing === id;
       const fresh = unlocked && def.tier > 1 && !this.seenUnlocked.has(id);
       set('bb' + id, `${unlocked}${poor}${active}${fresh}`, () => {
@@ -339,11 +350,12 @@ export class UI {
     });
     (this.novaBtn.querySelector('.cd') as HTMLElement).style.transform = `scaleY(${cdF})`;
     const cc = g.coreUpgradeCost();
-    set('beacon', `${g.coreLevel}:${cc}:${g.money >= (cc ?? 1e9)}`, () => {
+    const canAsc = cc !== null && g.canAfford(cc);
+    set('beacon', `${g.coreLevel}:${cc}:${canAsc}`, () => {
       const sub = this.beaconBtn.querySelector('.sub') as HTMLElement;
       sub.innerHTML = cc === null ? t('hud.max') : `${gem}${cc}`;
-      sub.style.color = cc !== null && g.money >= cc ? 'var(--aether)' : '';
-      this.beaconBtn.classList.toggle('ready', cc !== null && g.money >= cc);
+      sub.style.color = canAsc ? 'var(--aether)' : '';
+      this.beaconBtn.classList.toggle('ready', canAsc);
     });
 
     // boss bar
@@ -376,6 +388,22 @@ export class UI {
     p.innerHTML = '';
     const title = el('div', 'title', `<span>${t(g.phase === 'build' ? 'preview.coming' : 'preview.now', { n: `<b>${plan.wave}</b>` })}</span><span class="toggle">${this.previewCollapsed ? '▾' : '▴'}</span>`);
     p.append(title);
+    if (g.sandbox && g.phase === 'build') {
+      // sandbox night picker: step ±1 / ±5 nights
+      const pick = el('div', 'night-pick');
+      const mk = (label: string, d: number, tip: string) => {
+        const b = el('button', 'pick-btn', label) as HTMLButtonElement;
+        b.title = tip;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          g.setNextWave(g.nextPlan.wave + d);
+          audio.play('ui_click');
+        });
+        return b;
+      };
+      pick.append(mk('«', -5, t('sandbox.prev')), mk('◀', -1, t('sandbox.prev')), el('span', 'pick-n', String(plan.wave)), mk('▶', 1, t('sandbox.next')), mk('»', 5, t('sandbox.next')));
+      title.after(pick);
+    }
     if (plan.tag) p.append(el('div', 'tag', t(plan.tag)));
     const foes = el('div', 'foes');
     for (const [id, n] of Object.entries(plan.counts) as [EnemyId, number][]) {
@@ -419,11 +447,11 @@ export class UI {
     }
     if (b) {
       const up = g.upgradeCost(b);
-      const key = `b${b.uid}:${b.level}:${b.mode}:${up !== null && g.money >= up}:${g.sellValue(b)}:${Math.ceil(b.hp)}:${b.kills}:${g.phase}`;
+      const key = `b${b.uid}:${b.level}:${b.mode}:${up !== null && g.canAfford(up)}:${g.sellValue(b)}:${Math.ceil(b.hp)}:${b.kills}:${g.phase}`;
       set(this, 'panel', key, () => this.renderBuildingPanel(g, b));
     } else {
       const cc = g.coreUpgradeCost();
-      const key = `core:${g.coreLevel}:${cc !== null && g.money >= cc}:${Math.ceil(g.coreHp)}`;
+      const key = `core:${g.coreLevel}:${cc !== null && g.canAfford(cc)}:${Math.ceil(g.coreHp)}:${Math.ceil(g.novaCd)}`;
       set(this, 'panel', key, () => this.renderCorePanel(g));
     }
   }
@@ -453,7 +481,7 @@ export class UI {
       ub.disabled = true;
     } else {
       ub.innerHTML = `${t('panel.upgrade')} <span class="c">${gem}${up}</span>`;
-      ub.disabled = g.money < up;
+      ub.disabled = !g.canAfford(up);
       ub.title = t('panel.upgradeTip');
       ub.addEventListener('click', () => this.app.upgradeSelected());
     }
@@ -508,11 +536,18 @@ export class UI {
       ub.textContent = t('core.maxed');
       ub.disabled = true;
     } else {
-      ub.innerHTML = `${t('core.ascend')} <span class="c">${gem}${cc}</span>`;
-      ub.disabled = g.money < cc;
+      ub.innerHTML = `${t('core.ascend')} <span class="c">${g.sandbox ? t('hud.free') : gem + cc}</span>`;
+      ub.disabled = !g.canAfford(cc);
       ub.addEventListener('click', () => this.app.upgradeCore());
     }
-    actions.append(ub);
+    // The Nova lives here too, so touch players have it one tap away from the Beacon.
+    const nb = el('button', 'act nova') as HTMLButtonElement;
+    const ready = g.novaCd <= 0;
+    nb.innerHTML = `${SVG.nova}${t('hud.nova')} <span class="c">${ready ? t('hud.ready') : Math.ceil(g.novaCd) + 's'}</span>`;
+    nb.disabled = !ready;
+    nb.title = t('hud.novaTip');
+    nb.addEventListener('click', () => this.app.nova());
+    actions.append(ub, nb);
     p.append(actions);
   }
 

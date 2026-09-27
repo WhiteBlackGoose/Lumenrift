@@ -16,6 +16,12 @@ export const en = {
   'diff.normal.desc': 'The intended challenge.',
   'diff.nightmare.label': 'Nightmare',
   'diff.nightmare.desc': 'For those who have seen the dawn before.',
+  'diff.sandbox.label': "Sandbox",
+  'diff.sandbox.desc': "Endless aether, no defeat. Pick any night and experiment.",
+  'sandbox.prev': "Earlier night",
+  'sandbox.next': "Later night",
+  'hud.free': "Free",
+  'sandbox.hint': "Sandbox: everything is free and the Beacon can't fall. Pick the night with ◀ ▶ in the top-left panel.",
 
   'hud.coreTip': 'The Beacon. If its light fails, the night wins. Click it to upgrade.',
   'hud.moneyTip': 'Aether — earned by banishing shadows, surviving nights and harvesting crystal.',
@@ -124,7 +130,7 @@ export const en = {
   'help.between':
     "Build during the countdown, or call the next night early for bonus aether. The panel on the left previews what's coming. Unleash the <b>Nova</b> when shadows get close to the Beacon.",
   'help.touchH': 'Touch',
-  'help.touch': 'Drag to pan and pinch to zoom. Tap a structure to select it.',
+  'help.touch': 'Drag to pan and pinch to zoom. Tap a structure to select it. Tap the Beacon (or its health bar) to ascend it or unleash the Nova.',
   'help.keysH': 'Keys',
   'help.keys':
     '<kbd>1</kbd>–<kbd>=</kbd> structures · <kbd>U</kbd> upgrade · <kbd>X</kbd> sell · <kbd>T</kbd> targeting · <kbd>V</kbd> Nova · <kbd>B</kbd> Beacon · <kbd>N</kbd> call night · <kbd>Space</kbd> pause · <kbd>F</kbd> speed · <kbd>M</kbd> mute · Wheel zooms · Right-drag pans',

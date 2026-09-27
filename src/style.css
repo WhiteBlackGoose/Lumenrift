@@ -842,19 +842,21 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  /* the card centres itself with margin:auto, so tall cards scroll from the top instead of being cut off */
+  align-items: flex-start;
+  justify-content: flex-start;
   padding: 20px;
+  overflow-x: hidden;
   background: radial-gradient(ellipse at center, rgba(5, 6, 16, 0.35), rgba(5, 6, 16, 0.85));
   z-index: 30;
   overflow-y: auto;
 }
 .screen .card {
   width: min(560px, 100%);
+  margin: auto;
   padding: 28px;
   text-align: center;
-  max-height: 100%;
-  overflow-y: auto;
+  min-width: 0;
 }
 .logo {
   font-family: var(--font-title);
@@ -880,7 +882,7 @@ button:focus-visible {
 }
 .diffs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 18px;
 }
@@ -1197,9 +1199,7 @@ button:focus-visible {
   #panel .blurb {
     display: none;
   }
-  .stats {
-    grid-template-columns: auto 1fr auto 1fr;
-  }
+
   #preview {
     left: 6px;
     top: calc(var(--top-h) + 12px + var(--safe-t));
@@ -1262,4 +1262,221 @@ button:focus-visible {
   justify-self: start;
   font-size: 14px;
   padding: 6px 10px;
+}
+
+/* ------------------------------------------------------------------ sandbox & beacon panel extras */
+.night-pick {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px 0 8px;
+}
+.pick-btn {
+  min-width: 34px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--gold);
+  font-size: 13px;
+}
+.pick-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.pick-n {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--gold);
+  min-width: 2.2em;
+}
+.act.nova svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.act.nova:not(:disabled) {
+  border-color: var(--panel-border-strong);
+  background: radial-gradient(circle at 30% 50%, rgba(255, 220, 140, 0.22), rgba(255, 255, 255, 0.04) 70%);
+}
+
+/* ------------------------------------------------------------------ touch devices */
+/* Nova and Ascend live in the Beacon's panel (tap the Beacon or its health bar), so the side block is redundant. */
+body.touch #abilities {
+  display: none;
+}
+body.touch #build-bar {
+  flex: 1 1 auto;
+}
+
+/* ------------------------------------------------------------------ phones, portrait: two-row top bar */
+@media (max-width: 560px) {
+  :root {
+    --top-h: 86px;
+  }
+  #hud-top {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  #hud-top .spacer {
+    flex: 0 0 100%;
+    height: 0;
+  }
+  .core-stat {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .core-stat .num {
+    display: inline;
+    min-width: 0;
+    font-size: 11px;
+  }
+  .call-btn {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+  .call-btn .txt {
+    display: inline;
+  }
+  .diffs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .diff {
+    display: grid;
+    grid-template-columns: 7.5em minmax(0, 1fr);
+    align-items: center;
+    column-gap: 10px;
+    text-align: left;
+    padding: 10px 12px;
+  }
+  .diff .dd {
+    margin-top: 0;
+  }
+  .diff .best {
+    grid-column: 1 / -1;
+    margin-top: 2px;
+    min-height: 0;
+  }
+  .diff .best:empty {
+    display: none;
+  }
+  .tagline {
+    letter-spacing: 0.18em;
+    margin-bottom: 18px;
+  }
+}
+
+/* ------------------------------------------------------------------ phones, landscape */
+@media (max-height: 500px) {
+  #panel {
+    left: auto;
+    right: 6px;
+    width: min(310px, 45vw);
+    top: calc(var(--top-h) + 14px + var(--safe-t));
+    bottom: calc(var(--bottom-h) + 12px + var(--safe-b));
+    overflow-y: auto;
+  }
+  #panel .blurb {
+    display: none;
+  }
+  .screen {
+    padding: 10px;
+  }
+  .screen .card {
+    padding: 16px 20px;
+  }
+  .tagline {
+    margin: 6px 0 12px;
+  }
+  .diffs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 12px;
+  }
+  .diff {
+    padding: 8px 6px;
+  }
+  .screen .card:has(.diffs) {
+    width: min(720px, 100%);
+  }
+  .big-btn {
+    height: 46px;
+  }
+}
+
+/* ------------------------------------------------------------------ phones, landscape: build bar as a left strip */
+@media (max-height: 500px) and (orientation: landscape) {
+  #hud-bottom {
+    left: calc(4px + env(safe-area-inset-left, 0px));
+    right: auto;
+    top: calc(var(--top-h) + 12px + var(--safe-t));
+    bottom: calc(4px + var(--safe-b));
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+  #build-bar {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+    max-height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  #abilities {
+    flex-direction: column;
+  }
+  .bbtn {
+    width: 54px;
+    height: 54px;
+    padding-top: 3px;
+  }
+  .bbtn canvas {
+    width: 30px;
+    height: 30px;
+  }
+  .bbtn .cost {
+    font-size: 11px;
+    margin-top: 0;
+  }
+  #preview {
+    left: calc(78px + env(safe-area-inset-left, 0px));
+  }
+  .hint {
+    bottom: calc(8px + var(--safe-b));
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  /* the build bar lives on the left now, so the panel can use the full height */
+  #panel {
+    bottom: auto;
+    max-height: calc(100dvh - var(--top-h) - 22px - var(--safe-t) - var(--safe-b));
+    padding: 10px 12px;
+  }
+  #panel .head {
+    margin-bottom: 6px;
+  }
+  #panel .head canvas {
+    width: 36px;
+    height: 36px;
+  }
+  .stats {
+    margin-bottom: 8px;
+    font-size: 12px;
+    gap: 2px 10px;
+  }
+  .act {
+    height: 38px;
+  }
+  .core-stat .num {
+    display: none;
+  }
+}
+.core-stat .num {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

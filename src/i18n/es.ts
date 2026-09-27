@@ -15,6 +15,12 @@ export const es: Dict = {
   'diff.normal.desc': 'El desafío pensado para esto.',
   'diff.nightmare.label': 'Pesadilla',
   'diff.nightmare.desc': 'Para quienes ya han visto el amanecer.',
+  'diff.sandbox.label': "Sandbox",
+  'diff.sandbox.desc': "Éter infinito, sin derrota. Elige cualquier noche y experimenta.",
+  'sandbox.prev': "Noche anterior",
+  'sandbox.next': "Noche siguiente",
+  'hud.free': "Gratis",
+  'sandbox.hint': "Sandbox: todo es gratis y el Faro no puede caer. Elige la noche con ◀ ▶ en el panel superior izquierdo.",
 
   'hud.coreTip': 'El Faro. Si su luz se apaga, la noche gana. Haz clic para mejorarlo.',
   'hud.moneyTip': 'Éter — se obtiene desterrando sombras, sobreviviendo noches y extrayendo cristal.',
@@ -123,7 +129,7 @@ export const es: Dict = {
   'help.between':
     'Construye durante la cuenta atrás, o adelanta la siguiente noche para obtener éter extra. El panel de la izquierda anticipa lo que se acerca. Libera la <b>Nova</b> cuando las sombras se acerquen al Faro.',
   'help.touchH': 'Táctil',
-  'help.touch': 'Arrastra para desplazarte y pellizca para hacer zoom. Toca una estructura para seleccionarla.',
+  'help.touch': 'Arrastra para desplazarte y pellizca para hacer zoom. Toca una estructura para seleccionarla. Toca el Faro (o su barra de vida) para ascenderlo o desatar la Nova.',
   'help.keysH': 'Teclas',
   'help.keys':
     '<kbd>1</kbd>–<kbd>=</kbd> estructuras · <kbd>U</kbd> mejorar · <kbd>X</kbd> vender · <kbd>T</kbd> objetivo · <kbd>V</kbd> Nova · <kbd>B</kbd> Faro · <kbd>N</kbd> llamar noche · <kbd>Space</kbd> pausa · <kbd>F</kbd> velocidad · <kbd>M</kbd> silenciar · Rueda hace zoom · Arrastrar con clic derecho desplaza',

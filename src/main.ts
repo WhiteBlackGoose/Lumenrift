@@ -51,6 +51,7 @@ class App implements AppApi {
     this.ui = new UI(this);
     onLangChange(() => this.ui.relocalize());
     this.touch = matchMedia('(pointer: coarse)').matches;
+    document.body.classList.toggle('touch', this.touch);
     new Input(canvas, {
       cam: this.renderer.cam,
       hover: (x, y) => {
@@ -67,7 +68,11 @@ class App implements AppApi {
       cancel: () => this.setPlacing(null),
       isPlacing: () => !!this.placing,
       onTouchDetected: () => {
-        this.touch = true;
+        if (!this.touch) {
+          this.touch = true;
+          document.body.classList.add('touch');
+          this.resize();
+        }
       },
     });
     window.addEventListener('resize', () => this.resize());
@@ -92,8 +97,8 @@ class App implements AppApi {
   }
 
   private resize() {
-    const ins = this.attract ? { top: 0, bottom: 0 } : this.ui.insets();
-    this.renderer.resize(window.innerWidth, window.innerHeight, ins.top, ins.bottom);
+    const ins = this.attract ? { top: 0, bottom: 0, left: 0 } : this.ui.insets();
+    this.renderer.resize(window.innerWidth, window.innerHeight, ins.top, ins.bottom, ins.left);
   }
 
   // ------------------------------------------------------------------ game lifecycle
@@ -153,7 +158,8 @@ class App implements AppApi {
       }
       this.game.drainEvents();
     }
-    this.tutorial();
+    if (d === 'sandbox') this.ui.toast(t('sandbox.hint'), 'small info', 6);
+    else this.tutorial();
   }
 
   private tutTimers: number[] = [];
@@ -410,7 +416,7 @@ class App implements AppApi {
       if (g.over && !this.overHandled) {
         this.overHandled = true;
         const won = g.won;
-        const best = saveBest(g.difficulty, won ? g.wave : g.wave - 1);
+        const best = !g.sandbox && saveBest(g.difficulty, won ? g.wave : g.wave - 1);
         this.placing = null;
         setTimeout(() => this.ui.showGameOver(g, won, best), won ? 1200 : 1800);
       }

@@ -9,22 +9,25 @@ export class Camera {
   viewH = 600;
   insetTop = 0;
   insetBottom = 0;
+  insetLeft = 0;
   fitScale = 32;
   fullFit = 32;
   shake = 0;
   shakeX = 0;
   shakeY = 0;
 
-  resize(w: number, h: number, insetTop: number, insetBottom: number) {
+  resize(w: number, h: number, insetTop: number, insetBottom: number, insetLeft = 0) {
     const wasFit = Math.abs(this.scale - this.fitScale) < 0.01;
     this.viewW = w;
     this.viewH = h;
     this.insetTop = insetTop;
     this.insetBottom = insetBottom;
+    this.insetLeft = insetLeft;
     const availH = Math.max(100, h - insetTop - insetBottom);
-    this.fitScale = this.fullFit = Math.min(w / (MAP_W + 0.6), availH / (MAP_H + 0.6));
-    // Portrait phones: fitting the whole (landscape) map makes it tiny; show ~60% of it and let the player pan.
-    if (h > w * 1.2) this.fitScale = Math.max(this.fitScale, Math.min(availH / (MAP_H + 0.6), w / (MAP_W * 0.6)));
+    const availW = Math.max(100, w - insetLeft);
+    this.fitScale = this.fullFit = Math.min(availW / (MAP_W + 0.6), availH / (MAP_H + 0.6));
+    // Portrait phones: fitting the whole (landscape) map makes it tiny; fill the height instead and let the player pan sideways.
+    if (h > w * 1.2) this.fitScale = Math.max(this.fitScale, Math.min(availH / (MAP_H + 0.6), availW / (MAP_W * 0.45)));
     if (wasFit || this.scale < this.minScale) this.scale = this.fitScale;
     this.clamp();
   }
@@ -36,18 +39,22 @@ export class Camera {
     return Math.max(this.fitScale * 3.2, 64);
   }
 
+  private get midX() {
+    return this.insetLeft + (this.viewW - this.insetLeft) / 2;
+  }
+
   private get midY() {
     return this.insetTop + (this.viewH - this.insetTop - this.insetBottom) / 2;
   }
 
   toScreenX(wx: number) {
-    return (wx - this.cx) * this.scale + this.viewW / 2 + this.shakeX;
+    return (wx - this.cx) * this.scale + this.midX + this.shakeX;
   }
   toScreenY(wy: number) {
     return (wy - this.cy) * this.scale + this.midY + this.shakeY;
   }
   toWorldX(sx: number) {
-    return (sx - this.viewW / 2 - this.shakeX) / this.scale + this.cx;
+    return (sx - this.midX - this.shakeX) / this.scale + this.cx;
   }
   toWorldY(sy: number) {
     return (sy - this.midY - this.shakeY) / this.scale + this.cy;
@@ -58,7 +65,7 @@ export class Camera {
       wy = this.toWorldY(sy);
     this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
     // keep the world point under the cursor fixed
-    this.cx = wx - (sx - this.viewW / 2 - this.shakeX) / this.scale;
+    this.cx = wx - (sx - this.midX - this.shakeX) / this.scale;
     this.cy = wy - (sy - this.midY - this.shakeY) / this.scale;
     this.clamp();
   }
@@ -76,7 +83,7 @@ export class Camera {
   }
 
   private clamp() {
-    const halfW = this.viewW / 2 / this.scale;
+    const halfW = (this.viewW - this.insetLeft) / 2 / this.scale;
     const halfH = (this.viewH - this.insetTop - this.insetBottom) / 2 / this.scale;
     const clampAxis = (c: number, half: number, size: number) => {
       if (half * 2 >= size) return size / 2;

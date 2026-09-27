@@ -365,12 +365,14 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   },
 };
 
-export type Difficulty = 'casual' | 'normal' | 'nightmare';
+export type Difficulty = 'casual' | 'normal' | 'nightmare' | 'sandbox';
 
 export const DIFFICULTY: Record<Difficulty, { label: string; hp: number; budget: number; money: number; desc: string }> = {
   casual: { label: 'Dusk', hp: 0.72, budget: 0.85, money: 1.25, desc: 'Gentler shadows, richer purse.' },
   normal: { label: 'Night', hp: 1, budget: 1, money: 1, desc: 'The intended challenge.' },
   nightmare: { label: 'Nightmare', hp: 1.35, budget: 1.15, money: 0.9, desc: 'For those who have seen the dawn before.' },
+  // Sandbox: free building, an unbreakable Beacon, and you choose which night comes next.
+  sandbox: { label: 'Sandbox', hp: 1, budget: 1, money: 1, desc: 'Endless aether, no defeat.' },
 };
 
 /** Enemy hit point multiplier for a given wave. */

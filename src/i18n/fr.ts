@@ -15,6 +15,12 @@ export const fr: Dict = {
   'diff.normal.desc': 'Le défi prévu.',
   'diff.nightmare.label': 'Cauchemar',
   'diff.nightmare.desc': "Pour ceux qui ont déjà vu l'aube.",
+  'diff.sandbox.label': "Bac à sable",
+  'diff.sandbox.desc': "Éther infini, aucune défaite. Choisis n'importe quelle nuit et expérimente.",
+  'sandbox.prev': "Nuit précédente",
+  'sandbox.next': "Nuit suivante",
+  'hud.free': "Gratuit",
+  'sandbox.hint': "Bac à sable : tout est gratuit et le Phare ne peut pas tomber. Choisis la nuit avec ◀ ▶ en haut à gauche.",
 
   'hud.coreTip': "Le Phare. Si sa lumière s'éteint, la nuit triomphe. Clique dessus pour l'améliorer.",
   'hud.moneyTip': "Éther — gagné en bannissant les ombres, en survivant aux nuits et en récoltant le cristal.",
@@ -123,7 +129,7 @@ export const fr: Dict = {
   'help.between':
     "Construis pendant le compte à rebours, ou hâte la nuit suivante pour un bonus d'éther. Le panneau de gauche annonce ce qui approche. Déchaîne la <b>Nova</b> quand les ombres approchent du Phare.",
   'help.touchH': 'Tactile',
-  'help.touch': "Glisse pour te déplacer et pince pour zoomer. Touche une structure pour la sélectionner.",
+  'help.touch': "Glisse pour te déplacer et pince pour zoomer. Touche une structure pour la sélectionner. Touche le Phare (ou sa barre de vie) pour l'élever ou déchaîner la Nova.",
   'help.keysH': 'Touches',
   'help.keys':
     '<kbd>1</kbd>–<kbd>=</kbd> structures · <kbd>U</kbd> améliorer · <kbd>X</kbd> vendre · <kbd>T</kbd> ciblage · <kbd>V</kbd> Nova · <kbd>B</kbd> Phare · <kbd>N</kbd> hâter la nuit · <kbd>Space</kbd> pause · <kbd>F</kbd> vitesse · <kbd>M</kbd> muet · Molette zoome · Glisser-droit déplace la vue',

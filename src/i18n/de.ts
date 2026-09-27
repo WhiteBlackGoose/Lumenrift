@@ -15,6 +15,12 @@ export const de: Dict = {
   'diff.normal.desc': 'Die vorgesehene Herausforderung.',
   'diff.nightmare.label': 'Albtraum',
   'diff.nightmare.desc': 'Für jene, die die Morgendämmerung schon einmal gesehen haben.',
+  'diff.sandbox.label': "Sandkasten",
+  'diff.sandbox.desc': "Unendlich Äther, keine Niederlage. Wähle jede Nacht und experimentiere.",
+  'sandbox.prev': "Frühere Nacht",
+  'sandbox.next': "Spätere Nacht",
+  'hud.free': "Gratis",
+  'sandbox.hint': "Sandkasten: Alles ist gratis und das Leuchtfeuer kann nicht fallen. Wähle die Nacht mit ◀ ▶ oben links.",
 
   'hud.coreTip': 'Das Leuchtfeuer. Erlischt sein Licht, gewinnt die Nacht. Klicke darauf, um es aufzuwerten.',
   'hud.moneyTip': 'Äther — gewonnen durch das Verbannen von Schatten, das Überstehen von Nächten und das Ernten von Kristall.',
@@ -123,7 +129,7 @@ export const de: Dict = {
   'help.between':
     'Baue während des Countdowns, oder rufe die nächste Nacht vorzeitig für Bonus-Äther. Das Panel links zeigt eine Vorschau auf das Kommende. Entfessle die <b>Nova</b>, wenn Schatten dem Leuchtfeuer zu nahe kommen.',
   'help.touchH': 'Touch',
-  'help.touch': 'Ziehen zum Verschieben, zum Zoomen zusammenziehen. Tippe ein Bauwerk an, um es auszuwählen.',
+  'help.touch': 'Ziehen zum Verschieben, zum Zoomen zusammenziehen. Tippe ein Bauwerk an, um es auszuwählen. Tippe auf das Leuchtfeuer (oder seine Lebensleiste), um es aufsteigen zu lassen oder die Nova zu entfesseln.',
   'help.keysH': 'Tasten',
   'help.keys':
     '<kbd>1</kbd>–<kbd>=</kbd> Bauwerke · <kbd>U</kbd> Aufwerten · <kbd>X</kbd> Verkaufen · <kbd>T</kbd> Zielwahl · <kbd>V</kbd> Nova · <kbd>B</kbd> Leuchtfeuer · <kbd>N</kbd> Nacht rufen · <kbd>Space</kbd> Pause · <kbd>F</kbd> Tempo · <kbd>M</kbd> Stumm · Mausrad zoomt · Rechtsklick-Ziehen verschiebt',
