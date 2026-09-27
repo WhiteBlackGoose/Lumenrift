@@ -28,7 +28,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 - 👁️ **9 kinds of shadow.** Swarmers, flyers that ignore your maze, wall-smashing brutes, healers, armoured beetles, egg-sacs that burst into more enemies, and two bosses.
 - 🌗 **Dynamic lighting.** The world is dark. Your towers are the light.
 - 🎵 **Procedural audio.** Synthesized sound effects and an adaptive generative score that swells when the shadows come.
-- 📱 **Desktop and mobile.** Mouse and keyboard, or touch with pinch-zoom.
+- 📱 **Desktop and mobile, installable as an app.** Mouse and keyboard, or touch with pinch-zoom. Add it to your home screen and it runs fullscreen and works offline.
 - 🌍 **8 languages:** English, Deutsch, Español, Français, Italiano, Русский, Українська, Հայերեն. The game picks your system language automatically, and you can switch any time.
 
 ## Screenshots
@@ -51,6 +51,13 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 <td><img src="docs/img/victory.jpg" alt="Dawn Breaks victory screen: 30 nights survived, 1905 shadows banished"><br><sub><b>Dawn breaks.</b> Then you can keep going into endless night.</sub></td>
 </tr>
 </table>
+
+### Install it as an app
+
+LUMENRIFT is a Progressive Web App: it can be installed from the browser, launches fullscreen from your home screen, and works offline once installed.
+- **Firefox (Android):** open [lumenrift.wbg.gg](https://lumenrift.wbg.gg), then **⋮ menu → Add app to Home screen** (on some versions it's **Install**).
+- **Chrome / Edge (Android or desktop):** use **Install app** in the menu, or the install icon in the address bar.
+- **Safari (iOS):** **Share → Add to Home Screen**.
 
 ## How to play
 
