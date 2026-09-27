@@ -33,6 +33,8 @@ export interface AppApi {
   selectCore(): void;
   startGame(d: Difficulty): void;
   resumeSession(id: string): void;
+  respawn(): void;
+  respawnNight(): number | null;
   deleteSession(id: string): void;
   restart(): void;
   toTitle(): void;
@@ -733,17 +735,18 @@ export class UI {
     const wrap = el('div', 'saves');
     wrap.append(el('div', 'section-h', t('saves.title')));
     sessions.forEach((s, i) => {
-      const row = el('div', 'save-row' + (i === 0 ? ' latest' : ''));
+      const row = el('div', 'save-row' + (i === 0 ? ' latest' : '') + (s.fallen ? ' fallen' : ''));
       const info = el('div', 'save-info');
       const night = t('toast.night', { n: s.night }) + (s.won ? ' ☀' : '');
       const diffTag = `<span class="save-diff d-${s.difficulty}">${t(`diff.${s.difficulty}.label` as StringKey)}</span>`;
       const bits = [
-        s.won ? t('saves.dawn') : s.inNight ? t('saves.inNight') : '',
+        s.won ? t('saves.dawn') : s.fallen ? t('saves.fallen', { n: s.night }) : s.inNight ? t('saves.inNight') : '',
+        (s.attempts ?? 1) > 1 ? t('over.attemptN', { n: s.attempts }) : '',
         relTime(s.updated),
       ].filter(Boolean);
-      info.innerHTML = `<div class="save-main"><b>${night}</b>${diffTag}<span class="save-hp"><i style="width:${Math.round(s.beacon * 100)}%"></i></span></div><div class="save-sub">${bits.join(' · ')} · ${t('saves.beacon', { p: Math.round(s.beacon * 100) })} · ☠ ${fmt(s.kills)}</div>`;
+      info.innerHTML = `<div class="save-main"><b>${night}</b>${diffTag}<span class="save-hp"><i style="width:${Math.round(s.beacon * 100)}%"></i></span></div><div class="save-sub">${[...bits, ...(s.fallen ? [] : [t('saves.beacon', { p: Math.round(s.beacon * 100) })])].join(' · ')} · ⚔ ${fmt(s.kills)}</div>`;
       info.title = new Date(s.updated).toLocaleString(lang());
-      const resume = el('button', 'save-go', `▶ ${t('saves.resume')}`) as HTMLButtonElement;
+      const resume = el('button', 'save-go', s.fallen ? `↺ ${t('saves.respawn')}` : `▶ ${t('saves.resume')}`) as HTMLButtonElement;
       resume.addEventListener('click', () => {
         audio.unlock();
         this.app.resumeSession(s.id);
@@ -791,7 +794,7 @@ export class UI {
     this.app.togglePause(true);
     const card = el('div', 'card glass');
     card.append(el('div', 'over-title win', t('menu.paused')));
-    card.append(el('div', 'over-sub', t('menu.sub', { n: this.app.game.phase === 'build' ? this.app.game.wave + 1 : this.app.game.wave, diff: t(`diff.${this.app.game.difficulty}.label` as StringKey) })));
+    card.append(el('div', 'over-sub', t('menu.sub', { n: this.app.game.phase === 'build' ? this.app.game.wave + 1 : this.app.game.wave, diff: t(`diff.${this.app.game.difficulty}.label` as StringKey) }) + ((this.app.game.stats.attempts ?? 1) > 1 ? ' · ' + t('over.attemptN', { n: this.app.game.stats.attempts }) : '')));
     const col = el('div', '');
     col.style.display = 'grid';
     col.style.gap = '10px';
@@ -889,12 +892,26 @@ export class UI {
     this.hideTip();
     const card = el('div', 'card glass');
     card.append(el('div', 'over-title' + (won ? ' win' : ''), t(won ? 'over.win' : 'over.lose')));
+    const attempts = g.stats.attempts ?? 1;
     const sub = won ? t('over.winSub', { n: VICTORY_WAVE }) : t('over.loseSub', { n: g.wave });
+    const tries = won && attempts > 1 ? ' ' + t('over.winAttempts', { n: attempts }) : '';
     const rec = newBest ? ' ' + t(won ? 'over.record' : 'over.recordLose') : '';
-    card.append(el('div', 'over-sub', sub + rec));
-    const sum = el('div', 'summary');
-    sum.innerHTML = `<div><b>${won ? g.wave : g.wave - 1}</b><span>${t('over.nights')}</span></div><div><b>${fmt(g.stats.kills)}</b><span>${t('over.kills')}</span></div><div><b>${fmt(g.stats.earned)}</b><span>${t('over.earned')}</span></div>`;
+    card.append(el('div', 'over-sub', sub + tries + rec));
+    const sum = el('div', 'summary four');
+    sum.innerHTML =
+      `<div><b>${won ? g.wave : g.wave - 1}</b><span>${t('over.nights')}</span></div>` +
+      `<div><b>${fmt(g.stats.kills)}</b><span>${t('over.kills')}</span></div>` +
+      `<div><b>${fmt(g.stats.earned)}</b><span>${t('over.earned')}</span></div>` +
+      `<div><b>${attempts}</b><span>${t('over.attempt')}</span></div>`;
     card.append(sum);
+    // defeat: the main choice is to rewind three nights and try again
+    const rn = won ? null : this.app.respawnNight();
+    if (rn !== null) {
+      const rb = el('button', 'big-btn respawn', `↺ ${t('over.respawn', { n: rn })}`);
+      rb.title = t('over.respawnSub');
+      rb.addEventListener('click', () => this.app.respawn());
+      card.append(rb, el('div', 'respawn-sub', `${t('over.respawnSub')} · ${t('over.attemptN', { n: attempts + 1 })}`));
+    }
     const row = el('div', 'row-btns');
     if (won) {
       const cont = el('button', 'big-btn', t('over.endless'));
@@ -905,7 +922,7 @@ export class UI {
       });
       row.append(cont);
     }
-    const again = el('button', 'big-btn' + (won ? ' alt' : ''), t('over.again'));
+    const again = el('button', 'big-btn' + (won || rn !== null ? ' alt' : ''), t(rn !== null ? 'saves.newGame' : 'over.again'));
     again.addEventListener('click', () => this.app.restart());
     const title = el('button', 'big-btn alt', t('over.title'));
     title.addEventListener('click', () => this.app.toTitle());

@@ -2,7 +2,7 @@ import './style.css';
 import { audio, SfxName } from './audio/audio';
 import { Bot } from './game/bot';
 import { BUILDINGS, BuildingId, Difficulty, MAP_W } from './game/config';
-import { Building, Game, GameEvent } from './game/game';
+import { Building, Game, GameEvent, SaveData } from './game/game';
 import { isCoreTile } from './game/grid';
 import { Renderer, ViewState } from './render/renderer';
 import { Input } from './ui/input';
@@ -48,6 +48,10 @@ class App implements AppApi {
   private sessionId: string | null = null;
   private sessionCreated = 0;
   private saveTimer = 0;
+  /** Snapshots taken at the start of recent build phases, oldest first (for respawning). */
+  private checkpoints: SaveData[] = [];
+  /** Night on which the Beacon fell in the current run (null while alive). */
+  private fallenNight: number | null = null;
 
   constructor() {
     const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -142,6 +146,8 @@ class App implements AppApi {
     this.difficulty = d;
     const seed = params.get('seed') ? Number(params.get('seed')) : (Math.random() * 1e9) | 0;
     this.beginRun(new Game(seed, d));
+    this.checkpoints = [];
+    this.takeCheckpoint();
     // debug runs (?bot / ?ff) are not saved as sessions
     if (!params.get('bot') && !params.get('ff')) {
       this.sessionId = newSessionId();
@@ -164,12 +170,13 @@ class App implements AppApi {
 
   /** Continue a saved session. It resumes paused so the player can get their bearings. */
   resumeSession(id: string) {
-    const data = loadSession(id);
-    if (!data) {
+    const blob = loadSession(id);
+    if (!blob) {
       deleteSession(id);
       this.ui.showTitle();
       return;
     }
+    const data = blob.game;
     const created = listSessions().find((s) => s.id === id)?.created ?? Date.now();
     try {
       const g = Game.fromSave(data);
@@ -177,7 +184,15 @@ class App implements AppApi {
       this.beginRun(g);
       this.sessionId = id;
       this.sessionCreated = created;
+      this.checkpoints = blob.checkpoints ?? [];
+      if (blob.fallenNight) {
+        // this run had fallen: continuing it means respawning
+        this.fallenNight = blob.fallenNight;
+        this.respawn();
+        return;
+      }
       this.paused = true;
+      if (!this.checkpoints.length) this.takeCheckpoint(); // older saves had none
       this.ui.toast(t('saves.resumed', { n: g.phase === 'build' ? g.wave + 1 : g.wave }), 'small info', 5);
     } catch {
       deleteSession(id); // corrupt save: drop it rather than crash
@@ -189,8 +204,55 @@ class App implements AppApi {
     deleteSession(id);
   }
 
+  /** Snapshot the game at the start of a build phase (kept for the last few nights). */
+  private takeCheckpoint() {
+    const g = this.game;
+    if (!g || this.attract || g.sandbox || g.phase !== 'build') return;
+    const cp = g.toSave();
+    this.checkpoints = this.checkpoints.filter((c) => c.wave !== cp.wave);
+    this.checkpoints.push(cp);
+    this.checkpoints.sort((a, b) => a.wave - b.wave);
+    if (this.checkpoints.length > 5) this.checkpoints.shift();
+  }
+
+  /** The night a respawn would return to (three nights before the fatal one), or null if impossible. */
+  respawnNight(): number | null {
+    const cp = this.respawnCheckpoint();
+    return cp ? cp.wave + 1 : null;
+  }
+
+  private respawnCheckpoint(): SaveData | null {
+    if (this.fallenNight === null || !this.checkpoints.length) return null;
+    const target = Math.max(1, this.fallenNight - 3);
+    // the latest checkpoint at or before the target night, else the earliest we still have
+    const ok = this.checkpoints.filter((c) => c.wave + 1 <= target);
+    return ok.length ? ok[ok.length - 1] : this.checkpoints[0];
+  }
+
+  /** Rewind to the checkpoint three nights back and try again, counting a new attempt. */
+  respawn() {
+    const cp = this.respawnCheckpoint();
+    const old = this.game;
+    if (!cp || !old) return;
+    const attempts = (old.stats.attempts ?? 1) + 1;
+    const g = Game.fromSave(cp);
+    g.stats.attempts = attempts;
+    const id = this.sessionId,
+      created = this.sessionCreated;
+    // checkpoints from the failed timeline after this point no longer apply
+    this.checkpoints = this.checkpoints.filter((c) => c.wave <= cp.wave);
+    this.beginRun(g);
+    this.sessionId = id;
+    this.sessionCreated = created;
+    this.fallenNight = null;
+    this.saveNow();
+    this.ui.toast(t('toast.respawned', { a: attempts, n: g.wave + 1 }), 'small info', 4);
+    audio.play('rift_open');
+  }
+
   /** Shared setup for a fresh or restored game. */
   private beginRun(game: Game) {
+    this.fallenNight = null;
     this.attract = null;
     this.autoBot = null;
     this.sessionId = null;
@@ -214,8 +276,8 @@ class App implements AppApi {
   saveNow() {
     const g = this.game;
     if (!g || this.attract || !this.sessionId) return;
-    if (g.over && !g.won) return; // lost games are removed, not saved
-    saveSession(this.sessionId, g, this.sessionCreated);
+    if (g.over && !g.won && this.fallenNight === null) return;
+    saveSession(this.sessionId, g, this.sessionCreated, this.checkpoints, this.fallenNight ?? undefined);
   }
 
   private tutTimers: number[] = [];
@@ -461,7 +523,9 @@ class App implements AppApi {
       g.update(simDt);
     }
 
+    let cleared = false;
     for (const ev of g.drainEvents()) {
+      if (ev.type === 'waveClear') cleared = true;
       this.renderer.onEvent(ev, g);
       if (!this.attract) {
         this.ui.onEvent(ev, g);
@@ -469,6 +533,7 @@ class App implements AppApi {
       }
     }
 
+    if (cleared && !g.over) this.takeCheckpoint();
     if (this.selected && !g.buildings.includes(this.selected)) this.selected = null;
 
     if (!this.attract) {
@@ -476,11 +541,9 @@ class App implements AppApi {
         this.overHandled = true;
         const won = g.won;
         const best = !g.sandbox && saveBest(g.difficulty, won ? g.wave : g.wave - 1);
-        // a fallen Beacon ends the session; a victory stays resumable as endless night
-        if (this.sessionId) {
-          if (won) this.saveNow();
-          else deleteSession(this.sessionId);
-        }
+        // a victory stays resumable as endless night; a fall stays resumable as a respawn
+        if (!won) this.fallenNight = g.wave;
+        this.saveNow();
         this.placing = null;
         setTimeout(() => this.ui.showGameOver(g, won, best), won ? 1200 : 1800);
       }

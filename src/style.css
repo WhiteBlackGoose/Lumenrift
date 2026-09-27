@@ -1654,3 +1654,28 @@ body.touch #build-bar {
   width: 14px;
   height: 14px;
 }
+
+/* ------------------------------------------------------------------ respawn */
+.summary.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+@media (max-width: 560px) {
+  .summary.four {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.big-btn.respawn {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+.respawn-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+.save-row.fallen .save-main b {
+  color: #ff8a9e;
+}
+.save-row.fallen .save-hp i {
+  background: #ff5d7a;
+}

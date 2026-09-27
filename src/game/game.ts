@@ -224,7 +224,7 @@ export class Game {
   over = false;
   won = false;
   endless = false;
-  stats = { kills: 0, earned: 0, built: 0, lost: 0, bossKills: 0, leaked: 0 };
+  stats = { kills: 0, earned: 0, built: 0, lost: 0, bossKills: 0, leaked: 0, attempts: 1 };
 
   private uidSeq = 1;
   private byUid = new Map<number, Building>();

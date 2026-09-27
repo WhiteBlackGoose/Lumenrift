@@ -30,6 +30,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 - 🎵 **Procedural audio.** Synthesized sound effects and an adaptive generative score that swells when the shadows come.
 - 📱 **Desktop and mobile, installable as an app.** Mouse and keyboard, or touch with pinch-zoom. Add it to your home screen and it runs fullscreen and works offline.
 - 💾 **Saved games.** Progress autosaves continuously, even in the middle of a night. Close the tab or app and the title screen offers to pick up exactly where you left off. It lists every saved run with its mode, night, Beacon health and when you last played, and each can be resumed or deleted.
+- ↺ **Respawn.** If the Beacon falls, rewind three nights and try again. Every attempt is counted and shown on the defeat and victory screens and in your saved games. Fall and quit, and the saved run still waits with a Respawn button.
 - 🧪 **Sandbox mode.** Free building, an unbreakable Beacon, and a picker to jump to any night. Handy for testing mazes against a boss.
 - 🌍 **8 languages:** English, Deutsch, Español, Français, Italiano, Русский, Українська, Հայերեն. The game picks your system language automatically, and you can switch any time.
 
@@ -236,6 +237,7 @@ CHROMIUM=$(which chromium) node scripts/shot.mjs http://localhost:5173/
 CHROMIUM=$(which chromium) node scripts/flow.mjs http://localhost:5173/
 CHROMIUM=$(which chromium) node scripts/mobile.mjs http://localhost:5173/   # phone layouts: overlap/overflow audit
 CHROMIUM=$(which chromium) node scripts/sessions.mjs http://localhost:5173/ # save, leave mid-night, resume, delete
+CHROMIUM=$(which chromium) node scripts/respawn.mjs http://localhost:5173/  # fall, respawn 3 nights back, attempts
 ```
 
 Every push to `main` is built and deployed to GitHub Pages by `.github/workflows/deploy.yml`.

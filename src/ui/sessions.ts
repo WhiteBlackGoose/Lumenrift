@@ -10,8 +10,20 @@ export interface SessionMeta {
   beacon: number; // Beacon health, 0..1
   kills: number;
   won: boolean;
+  attempts: number;
+  /** The Beacon fell; the session can be respawned from a checkpoint. */
+  fallen: boolean;
   created: number;
   updated: number;
+}
+
+/** What's stored per session: the live game plus checkpoints from recent build phases (for respawning). */
+export interface SessionBlob {
+  v: 2;
+  game: SaveData;
+  checkpoints: SaveData[];
+  /** Set when the Beacon fell on this night. */
+  fallenNight?: number;
 }
 
 const INDEX = 'lumen.sessions';
@@ -44,15 +56,17 @@ export function newSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-export function saveSession(id: string, g: Game, created: number): void {
+export function saveSession(id: string, g: Game, created: number, checkpoints: SaveData[], fallenNight?: number): void {
   const meta: SessionMeta = {
     id,
     difficulty: g.difficulty,
-    night: g.phase === 'build' && !g.over ? g.wave + 1 : g.wave,
-    inNight: g.phase === 'wave',
+    night: fallenNight ?? (g.phase === 'build' && !g.over ? g.wave + 1 : g.wave),
+    inNight: g.phase === 'wave' && !fallenNight,
     beacon: Math.max(0, Math.min(1, g.coreHp / g.coreMaxHp)),
     kills: g.stats.kills,
     won: g.won,
+    attempts: g.stats.attempts ?? 1,
+    fallen: !!fallenNight,
     created,
     updated: Date.now(),
   };
@@ -62,7 +76,8 @@ export function saveSession(id: string, g: Game, created: number): void {
   list.sort((a, b) => b.updated - a.updated);
   for (const old of list.slice(MAX)) removeData(old.id);
   list = list.slice(0, MAX);
-  const blob = JSON.stringify(g.toSave());
+  const data: SessionBlob = { v: 2, game: g.toSave(), checkpoints, fallenNight };
+  const blob = JSON.stringify(data);
   try {
     localStorage.setItem(DATA + id, blob);
   } catch {
@@ -82,11 +97,13 @@ export function saveSession(id: string, g: Game, created: number): void {
   writeIndex(list);
 }
 
-export function loadSession(id: string): SaveData | null {
+export function loadSession(id: string): SessionBlob | null {
   try {
     const raw = localStorage.getItem(DATA + id);
-    const d = raw ? (JSON.parse(raw) as SaveData) : null;
-    return d && d.v === 1 ? d : null;
+    const d = raw ? JSON.parse(raw) : null;
+    if (d?.v === 2) return d as SessionBlob;
+    if (d?.v === 1) return { v: 2, game: d as SaveData, checkpoints: [] }; // older saves
+    return null;
   } catch {
     return null;
   }
