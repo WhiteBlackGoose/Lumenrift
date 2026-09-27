@@ -9,6 +9,7 @@ export const en = {
   'title.how': 'How to play',
   'title.settings': 'Settings',
   'title.best': 'Best: night {n}',
+  'warn.gfx': "Your browser's graphics stopped working, so parts of the map can't be drawn. Restarting the browser fixes this.",
   'about.source': "Source on GitHub",
   'about.license': "Free to use: public domain (CC0)",
   'saves.title': "Continue",

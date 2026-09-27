@@ -8,6 +8,7 @@ export const fr: Dict = {
   'title.how': 'Comment jouer',
   'title.settings': 'Options',
   'title.best': 'Record : nuit {n}',
+  'warn.gfx': "Les graphismes de ton navigateur ne fonctionnent plus : certaines parties de la carte ne peuvent pas être dessinées. Redémarrer le navigateur règle le problème.",
   'about.source': "Code source sur GitHub",
   'about.license': "Libre d'utilisation : domaine public (CC0)",
   'saves.title': "Continuer",

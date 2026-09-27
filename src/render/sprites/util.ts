@@ -93,6 +93,13 @@ let budget = 0;
  * budget is spent, cache misses fall back to the nearest resolution already rendered instead of
  * rendering synchronously — this keeps pinch-zoom smooth; sprites sharpen over the next frames.
  */
+/** Debug/diagnostics: number of cached canvases and their total pixel count. */
+export function cacheStats() {
+  let px = 0;
+  for (const m of cache.values()) for (const c of m.values()) px += c.width * c.height;
+  return { canvases: cacheCount, megapixels: +(px / 1e6).toFixed(1), keys: cache.size };
+}
+
 export function cacheFrame(isZooming: boolean) {
   zooming = isZooming;
   budget = 6;

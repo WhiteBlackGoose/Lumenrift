@@ -8,6 +8,7 @@ export const de: Dict = {
   'title.how': 'Spielanleitung',
   'title.settings': 'Optionen',
   'title.best': 'Bestleistung: Nacht {n}',
+  'warn.gfx': "Die Grafik deines Browsers funktioniert nicht mehr, daher können Teile der Karte nicht gezeichnet werden. Ein Neustart des Browsers behebt das.",
   'about.source': "Quellcode auf GitHub",
   'about.license': "Frei nutzbar: gemeinfrei (CC0)",
   'saves.title': "Weiterspielen",

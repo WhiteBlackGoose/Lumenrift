@@ -48,6 +48,7 @@ class App implements AppApi {
   private sessionId: string | null = null;
   private sessionCreated = 0;
   private saveTimer = 0;
+  private gfxWarned = false;
   /** Snapshots taken at the start of recent build phases, oldest first (for respawning). */
   private checkpoints: SaveData[] = [];
   /** Night on which the Beacon fell in the current run (null while alive). */
@@ -569,6 +570,10 @@ class App implements AppApi {
       hoverTile: this.hover,
     };
     this.renderer.draw(g, view);
+    if (this.renderer.graphicsBroken && !this.gfxWarned) {
+      this.gfxWarned = true;
+      this.ui.toast(t('warn.gfx'), 'small err', 12);
+    }
     if (!this.attract) this.ui.update();
   }
 

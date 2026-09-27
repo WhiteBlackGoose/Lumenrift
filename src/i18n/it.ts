@@ -9,6 +9,7 @@ export const it: Dict = {
   'title.how': 'Come si gioca',
   'title.settings': 'Impostazioni',
   'title.best': 'Record: notte {n}',
+  'warn.gfx': "La grafica del browser ha smesso di funzionare, quindi alcune parti della mappa non possono essere disegnate. Riavviare il browser risolve il problema.",
   'about.source': "Codice su GitHub",
   'about.license': "Libero da usare: pubblico dominio (CC0)",
   'saves.title': "Continua",

@@ -69,6 +69,8 @@ export class Renderer {
   private crystals: { x: number; y: number }[] = [];
   time = 0;
   lowFx = false;
+  /** Set when the browser hands out canvases that can't be drawn into (e.g. after a graphics driver reset). */
+  graphicsBroken = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -144,6 +146,14 @@ export class Renderer {
     if (this.ground && this.groundFor === game && this.ground.width >= MAP_W * px * 0.8) return;
     this.ground = S.renderGround(game.map, px);
     this.groundFor = game;
+    // The ground is fully opaque, so a transparent sample means the browser's canvas backend failed
+    // (seen in Firefox after a GPU process reset; only a browser restart fixes it).
+    try {
+      const a = this.ground.getContext('2d')?.getImageData(this.ground.width >> 1, this.ground.height >> 1, 1, 1).data[3] ?? 0;
+      if (a === 0) this.graphicsBroken = true;
+    } catch {
+      this.graphicsBroken = true;
+    }
     this.crystals = [];
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) if (game.map.terrain[idx(x, y)] === Terrain.Crystal) this.crystals.push({ x: x + 0.5, y: y + 0.5 });
