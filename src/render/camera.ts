@@ -13,6 +13,8 @@ export class Camera {
   fitScale = 32;
   fullFit = 32;
   shake = 0;
+  /** performance.now() of the last zoom step (renderers avoid heavy re-renders while zooming). */
+  lastZoom = 0;
   shakeX = 0;
   shakeY = 0;
 
@@ -64,6 +66,7 @@ export class Camera {
     const wx = this.toWorldX(sx),
       wy = this.toWorldY(sy);
     this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
+    this.lastZoom = performance.now();
     // keep the world point under the cursor fixed
     this.cx = wx - (sx - this.midX - this.shakeX) / this.scale;
     this.cy = wy - (sy - this.midY - this.shakeY) / this.scale;

@@ -148,6 +148,34 @@ export type GameEvent =
   | { type: 'defeat' }
   | { type: 'victory' };
 
+/** Everything needed to resume a game exactly where it was left (the map regenerates from the seed). */
+export interface SaveData {
+  v: 1;
+  seed: number;
+  difficulty: Difficulty;
+  rng: number;
+  uidSeq: number;
+  money: number;
+  coreLevel: number;
+  coreHp: number;
+  novaCd: number;
+  wave: number;
+  phase: 'build' | 'wave';
+  buildTimer: number; // -1 = infinite (sandbox)
+  waveTime: number;
+  plan: WavePlan | null;
+  nextPlan: WavePlan;
+  queue: WaveSpawn[];
+  time: number;
+  won: boolean;
+  endless: boolean;
+  stats: Game['stats'];
+  buildings: (Omit<Building, 'def'> & { def: BuildingId })[];
+  enemies: (Omit<Enemy, 'def'> & { def: EnemyId })[];
+  projectiles: Projectile[];
+  strikes: Strike[];
+}
+
 export interface PlaceCheck {
   ok: boolean;
   reason?: StringKey;
@@ -216,6 +244,73 @@ export class Game {
     }
     this.recomputeFlow();
     this.nextPlan = planWave(1, difficulty, seed);
+  }
+
+  // ---------------------------------------------------------------- save / load
+
+  toSave(): SaveData {
+    return {
+      v: 1,
+      seed: this.seed,
+      difficulty: this.difficulty,
+      rng: this.rng.state,
+      uidSeq: this.uidSeq,
+      money: this.money,
+      coreLevel: this.coreLevel,
+      coreHp: this.coreHp,
+      novaCd: this.novaCd,
+      wave: this.wave,
+      phase: this.phase,
+      buildTimer: isFinite(this.buildTimer) ? this.buildTimer : -1,
+      waveTime: this.waveTime,
+      plan: this.plan,
+      nextPlan: this.nextPlan,
+      queue: this.queue,
+      time: this.time,
+      won: this.won,
+      endless: this.endless,
+      stats: { ...this.stats },
+      buildings: this.buildings.map((b) => ({ ...b, def: b.def.id })),
+      enemies: this.enemies.filter((e) => !e.dead).map((e) => ({ ...e, def: e.def.id })),
+      projectiles: this.projectiles.filter((p) => !p.dead),
+      strikes: this.strikes,
+    };
+  }
+
+  static fromSave(d: SaveData): Game {
+    const g = new Game(d.seed, d.difficulty);
+    g.rng.state = d.rng;
+    g.uidSeq = d.uidSeq;
+    g.money = d.money;
+    g.coreLevel = d.coreLevel;
+    g.coreHp = d.coreHp;
+    g.novaCd = d.novaCd;
+    g.wave = d.wave;
+    g.phase = d.phase;
+    g.buildTimer = d.buildTimer < 0 ? Infinity : d.buildTimer;
+    g.waveTime = d.waveTime;
+    g.plan = d.plan;
+    g.nextPlan = d.nextPlan;
+    g.queue = d.queue;
+    g.time = d.time;
+    g.won = d.won;
+    g.endless = d.endless || d.won; // a won game resumes as endless night
+    g.stats = { ...g.stats, ...d.stats };
+    for (const s of d.buildings) {
+      const b: Building = { ...s, def: BUILDINGS[s.def] };
+      g.buildings.push(b);
+      g.byUid.set(b.uid, b);
+      g.buildingAt[idx(b.x, b.y)] = b.uid;
+    }
+    for (const s of d.enemies) {
+      const e: Enemy = { ...s, def: ENEMIES[s.def], hasWp: false };
+      g.enemies.push(e);
+      g.enemyByUid.set(e.uid, e);
+    }
+    g.projectiles = d.projectiles;
+    g.strikes = d.strikes;
+    g.recomputeFlow();
+    return g;
   }
 
   // ---------------------------------------------------------------- queries

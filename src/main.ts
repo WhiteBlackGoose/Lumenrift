@@ -6,6 +6,7 @@ import { Building, Game, GameEvent } from './game/game';
 import { isCoreTile } from './game/grid';
 import { Renderer, ViewState } from './render/renderer';
 import { Input } from './ui/input';
+import { deleteSession, listSessions, loadSession, newSessionId, saveSession } from './ui/sessions';
 import { saveBest } from './ui/storage';
 import { applyDocument, onLangChange, t } from './i18n';
 import { AppApi, bname, BUILD_KEYS, UI } from './ui/ui';
@@ -43,6 +44,10 @@ class App implements AppApi {
   private overHandled = false;
   private lastT = 0;
   private autoBot: Bot | null = null;
+  /** Current saved session (null for attract mode and bot/debug runs). */
+  private sessionId: string | null = null;
+  private sessionCreated = 0;
+  private saveTimer = 0;
 
   constructor() {
     const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -81,7 +86,10 @@ class App implements AppApi {
       if (document.hidden && this.game && !this.attract && !this.game.over) {
         this.togglePause(true);
       }
+      if (document.hidden) this.saveNow();
     });
+    // closing the tab / app: save one last time
+    window.addEventListener('pagehide', () => this.saveNow());
     // unlock audio on first gesture
     const unlock = () => audio.unlock();
     window.addEventListener('pointerdown', unlock, { once: true });
@@ -104,6 +112,7 @@ class App implements AppApi {
   // ------------------------------------------------------------------ game lifecycle
 
   private startAttract(showTitle = true) {
+    this.sessionId = null;
     this.autoBot = null;
     this.renderer.reset();
     const g = new Game((Math.random() * 1e9) | 0, 'casual');
@@ -132,34 +141,81 @@ class App implements AppApi {
   startGame(d: Difficulty) {
     this.difficulty = d;
     const seed = params.get('seed') ? Number(params.get('seed')) : (Math.random() * 1e9) | 0;
+    this.beginRun(new Game(seed, d));
+    // debug runs (?bot / ?ff) are not saved as sessions
+    if (!params.get('bot') && !params.get('ff')) {
+      this.sessionId = newSessionId();
+      this.sessionCreated = Date.now();
+      this.saveNow();
+    }
+    if (params.get('bot')) this.autoBot = new Bot(this.game!, { skill: 0.8, maze: false });
+    const ff = Number(params.get('ff') ?? 0);
+    if (ff > 0) {
+      const bot = this.autoBot ?? new Bot(this.game!, { skill: 0.8, maze: false });
+      for (let i = 0; i < ff * 60 && !this.game!.over; i++) {
+        bot.update(1 / 60);
+        this.game!.step(1 / 60);
+      }
+      this.game!.drainEvents();
+    }
+    if (d === 'sandbox') this.ui.toast(t('sandbox.hint'), 'small info', 6);
+    else this.tutorial();
+  }
+
+  /** Continue a saved session. It resumes paused so the player can get their bearings. */
+  resumeSession(id: string) {
+    const data = loadSession(id);
+    if (!data) {
+      deleteSession(id);
+      this.ui.showTitle();
+      return;
+    }
+    const created = listSessions().find((s) => s.id === id)?.created ?? Date.now();
+    try {
+      const g = Game.fromSave(data);
+      this.difficulty = g.difficulty;
+      this.beginRun(g);
+      this.sessionId = id;
+      this.sessionCreated = created;
+      this.paused = true;
+      this.ui.toast(t('saves.resumed', { n: g.phase === 'build' ? g.wave + 1 : g.wave }), 'small info', 5);
+    } catch {
+      deleteSession(id); // corrupt save: drop it rather than crash
+      this.startAttract();
+    }
+  }
+
+  deleteSession(id: string) {
+    deleteSession(id);
+  }
+
+  /** Shared setup for a fresh or restored game. */
+  private beginRun(game: Game) {
     this.attract = null;
     this.autoBot = null;
+    this.sessionId = null;
     this.renderer.reset();
     this.ui.resetRun();
-    this.game = new Game(seed, d);
+    this.game = game;
     this.placing = null;
     this.selected = null;
     this.coreSelected = false;
     this.paused = false;
     this.speed = 1;
-    this.overHandled = false;
+    this.overHandled = game.over;
     this.ui.closeScreen();
     this.ui.setHudVisible(true);
     this.resize();
     this.renderer.cam.reset();
-    audio.setMood('build');
-    if (params.get('bot')) this.autoBot = new Bot(this.game, { skill: 0.8, maze: false });
-    const ff = Number(params.get('ff') ?? 0);
-    if (ff > 0) {
-      const bot = this.autoBot ?? new Bot(this.game, { skill: 0.8, maze: false });
-      for (let i = 0; i < ff * 60 && !this.game.over; i++) {
-        bot.update(1 / 60);
-        this.game.step(1 / 60);
-      }
-      this.game.drainEvents();
-    }
-    if (d === 'sandbox') this.ui.toast(t('sandbox.hint'), 'small info', 6);
-    else this.tutorial();
+    audio.setMood(game.phase === 'wave' ? (game.plan?.boss ? 'boss' : 'wave') : 'build');
+  }
+
+  /** Persist the current session (no-op outside a saved run). */
+  saveNow() {
+    const g = this.game;
+    if (!g || this.attract || !this.sessionId) return;
+    if (g.over && !g.won) return; // lost games are removed, not saved
+    saveSession(this.sessionId, g, this.sessionCreated);
   }
 
   private tutTimers: number[] = [];
@@ -183,10 +239,13 @@ class App implements AppApi {
   }
 
   restart() {
+    // restarting abandons the current run
+    if (this.sessionId) deleteSession(this.sessionId);
     this.startGame(this.difficulty);
   }
 
   toTitle() {
+    this.saveNow();
     this.ui.closeScreen();
     this.startAttract();
   }
@@ -417,10 +476,23 @@ class App implements AppApi {
         this.overHandled = true;
         const won = g.won;
         const best = !g.sandbox && saveBest(g.difficulty, won ? g.wave : g.wave - 1);
+        // a fallen Beacon ends the session; a victory stays resumable as endless night
+        if (this.sessionId) {
+          if (won) this.saveNow();
+          else deleteSession(this.sessionId);
+        }
         this.placing = null;
         setTimeout(() => this.ui.showGameOver(g, won, best), won ? 1200 : 1800);
       }
       audio.setIntensity(Math.min(1, g.enemies.length / 40));
+      // autosave every few seconds of play
+      if (running && !g.over) {
+        this.saveTimer += dt;
+        if (this.saveTimer > 4) {
+          this.saveTimer = 0;
+          this.saveNow();
+        }
+      }
     }
 
     this.renderer.update(g, simDt);

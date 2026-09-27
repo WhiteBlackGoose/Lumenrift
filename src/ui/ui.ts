@@ -15,6 +15,7 @@ import {
 import { Building, Game, GameEvent } from '../game/game';
 import { drawIcon } from '../render/sprites';
 import { lang, LANG_ORDER, LANGS, Lang, setLang, StringKey, t } from '../i18n';
+import { listSessions, SessionMeta } from './sessions';
 import { loadBest } from './storage';
 
 export interface AppApi {
@@ -31,6 +32,8 @@ export interface AppApi {
   deselect(): void;
   selectCore(): void;
   startGame(d: Difficulty): void;
+  resumeSession(id: string): void;
+  deleteSession(id: string): void;
   restart(): void;
   toTitle(): void;
   continueEndless(): void;
@@ -684,6 +687,11 @@ export class UI {
     this.hideTip();
     const card = el('div', 'card glass');
     card.append(el('div', 'logo', 'LUMENRIFT'), el('div', 'tagline', t('title.tagline')));
+    const sessions = listSessions();
+    if (sessions.length) {
+      card.append(this.sessionList(sessions));
+      card.append(el('div', 'section-h', t('saves.newGame')));
+    }
     const best = loadBest();
     const diffs = el('div', 'diffs');
     let chosen: Difficulty = this.app.difficulty;
@@ -718,6 +726,50 @@ export class UI {
     links.append(how, set_, this.langSelect());
     card.append(links);
     this.showScreen(card, false, () => this.showTitle());
+  }
+
+  /** Saved games, most recent first, each resumable or deletable (with an inline confirm). */
+  private sessionList(sessions: SessionMeta[]): HTMLElement {
+    const wrap = el('div', 'saves');
+    wrap.append(el('div', 'section-h', t('saves.title')));
+    sessions.forEach((s, i) => {
+      const row = el('div', 'save-row' + (i === 0 ? ' latest' : ''));
+      const info = el('div', 'save-info');
+      const night = t('toast.night', { n: s.night }) + (s.won ? ' ☀' : '');
+      const diffTag = `<span class="save-diff d-${s.difficulty}">${t(`diff.${s.difficulty}.label` as StringKey)}</span>`;
+      const bits = [
+        s.won ? t('saves.dawn') : s.inNight ? t('saves.inNight') : '',
+        relTime(s.updated),
+      ].filter(Boolean);
+      info.innerHTML = `<div class="save-main"><b>${night}</b>${diffTag}<span class="save-hp"><i style="width:${Math.round(s.beacon * 100)}%"></i></span></div><div class="save-sub">${bits.join(' · ')} · ${t('saves.beacon', { p: Math.round(s.beacon * 100) })} · ☠ ${fmt(s.kills)}</div>`;
+      info.title = new Date(s.updated).toLocaleString(lang());
+      const resume = el('button', 'save-go', `▶ ${t('saves.resume')}`) as HTMLButtonElement;
+      resume.addEventListener('click', () => {
+        audio.unlock();
+        this.app.resumeSession(s.id);
+      });
+      const del = el('button', 'save-del', '✕') as HTMLButtonElement;
+      del.title = t('saves.delete');
+      del.setAttribute('aria-label', t('saves.delete'));
+      del.addEventListener('click', () => {
+        // swap the row for an inline confirmation
+        row.classList.add('confirm');
+        row.innerHTML = '';
+        const q = el('div', 'save-info', `<div class="save-main">${t('saves.confirm')}</div><div class="save-sub">${night} · ${bits.join(' · ')}</div>`);
+        const yes = el('button', 'save-go danger', t('saves.delete')) as HTMLButtonElement;
+        const no = el('button', 'save-go', t('saves.keep')) as HTMLButtonElement;
+        yes.addEventListener('click', () => {
+          this.app.deleteSession(s.id);
+          audio.play('sell');
+          this.showTitle();
+        });
+        no.addEventListener('click', () => this.showTitle());
+        row.append(q, yes, no);
+      });
+      row.append(info, resume, del);
+      wrap.append(row);
+    });
+    return wrap;
   }
 
   /** Compact language dropdown. */
@@ -869,6 +921,22 @@ function set(ui: UI, key: string, v: unknown, fn: () => void) {
     last[key] = v;
     fn();
   }
+}
+
+/** "5 minutes ago" / "vor 2 Stunden" in the current language; plain date after a week. */
+function relTime(ts: number): string {
+  const s = Math.round((ts - Date.now()) / 1000);
+  const abs = Math.abs(s);
+  try {
+    const rtf = new Intl.RelativeTimeFormat(lang(), { numeric: 'auto' });
+    if (abs < 60) return rtf.format(0, 'second');
+    if (abs < 3600) return rtf.format(Math.round(s / 60), 'minute');
+    if (abs < 86400) return rtf.format(Math.round(s / 3600), 'hour');
+    if (abs < 7 * 86400) return rtf.format(Math.round(s / 86400), 'day');
+  } catch {
+    /* Intl unavailable */
+  }
+  return new Date(ts).toLocaleDateString(lang());
 }
 
 export const bname = (id: BuildingId) => t(`b.${id}.name` as StringKey);

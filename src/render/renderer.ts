@@ -4,6 +4,7 @@ import { idx, Terrain } from '../game/grid';
 import { Camera } from './camera';
 import { Particles, PK } from './particles';
 import * as S from './sprites';
+import { cacheFrame } from './sprites/util';
 
 export interface ViewState {
   placing: BuildingId | null;
@@ -94,7 +95,7 @@ export class Renderer {
     this.light.width = Math.ceil(w / 2);
     this.light.height = Math.ceil(h / 2);
     this.cam.resize(w, h, insetTop, insetBottom, insetLeft);
-    this.ground = null; // re-render at the new resolution
+    // the ground re-renders only if the new size needs noticeably more resolution (see ensureGround)
   }
 
   // ------------------------------------------------------------------ assets
@@ -136,9 +137,11 @@ export class Renderer {
   }
 
   private ensureGround(game: Game) {
-    const want = this.cam.scale * this.dpr;
-    const px = [24, 36, 48, 64, 96].find((b) => b >= want * 0.9) ?? 96;
-    if (this.ground && this.groundFor === game && this.ground.width === MAP_W * px) return;
+    // The ground is rendered once per game (and on big resizes) at a resolution that looks fine
+    // across the zoom range; zooming only rescales it, so pinch-zoom never triggers a re-render.
+    const want = this.cam.fullFit * this.dpr * 1.8;
+    const px = [32, 40, 48, 56, 64, 72].find((b) => b >= want) ?? 72;
+    if (this.ground && this.groundFor === game && this.ground.width >= MAP_W * px * 0.8) return;
     this.ground = S.renderGround(game.map, px);
     this.groundFor = game;
     this.crystals = [];
@@ -378,6 +381,7 @@ export class Renderer {
     const dpr = this.dpr;
     const t = this.time;
     this.ensureGround(game);
+    cacheFrame(performance.now() - cam.lastZoom < 250);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';

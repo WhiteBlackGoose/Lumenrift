@@ -82,7 +82,22 @@ export function pxOf(ctx: CanvasRenderingContext2D): number {
   return Math.max(4, Math.min(256, Math.pow(2, Math.round(Math.log2(a) * 4) / 4)));
 }
 
-const cache = new Map<string, HTMLCanvasElement>();
+// key -> (pixel scale -> canvas). Several resolutions of the same sprite can coexist.
+const cache = new Map<string, Map<number, HTMLCanvasElement>>();
+let cacheCount = 0;
+let zooming = false;
+let budget = 0;
+
+/**
+ * Called once per frame by the renderer. While the camera is zooming, and once the per-frame
+ * budget is spent, cache misses fall back to the nearest resolution already rendered instead of
+ * rendering synchronously — this keeps pinch-zoom smooth; sprites sharpen over the next frames.
+ */
+export function cacheFrame(isZooming: boolean) {
+  zooming = isZooming;
+  budget = 6;
+}
+
 /**
  * Returns an offscreen canvas that covers the local region [ox, ox+w] x [oy, oy+h] (tile units)
  * rendered at `px` pixels per unit. `draw` receives a ctx already scaled to tile units with the
@@ -97,18 +112,37 @@ export function cached(
   h: number,
   draw: (c: CanvasRenderingContext2D) => void,
 ): HTMLCanvasElement {
-  const k = key + '@' + px;
-  let cv = cache.get(k);
-  if (cv) return cv;
-  if (cache.size > 700) cache.clear();
-  cv = document.createElement('canvas');
+  let variants = cache.get(key);
+  const hit = variants?.get(px);
+  if (hit) return hit;
+  if (variants && variants.size && (zooming || budget <= 0)) {
+    let best: HTMLCanvasElement | undefined,
+      bd = Infinity;
+    for (const [p, c] of variants) {
+      const d = Math.abs(Math.log2(p / px));
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    return best!;
+  }
+  budget--;
+  if (cacheCount > 900) {
+    cache.clear();
+    cacheCount = 0;
+    variants = undefined;
+  }
+  const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.ceil(w * px));
   cv.height = Math.max(1, Math.ceil(h * px));
   const c = cv.getContext('2d')!;
   c.scale(px, px);
   c.translate(-ox, -oy);
   draw(c);
-  cache.set(k, cv);
+  if (!variants) cache.set(key, (variants = new Map()));
+  variants.set(px, cv);
+  cacheCount++;
   return cv;
 }
 
