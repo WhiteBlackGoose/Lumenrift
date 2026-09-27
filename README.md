@@ -52,7 +52,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 </tr>
 </table>
 
-### Install it as an app
+## Install it as an app
 
 LUMENRIFT is a Progressive Web App: it can be installed from the browser, launches fullscreen from your home screen, and works offline once installed.
 - **Firefox (Android):** open [lumenrift.wbg.gg](https://lumenrift.wbg.gg), then **⋮ menu → Add app to Home screen** (on some versions it's **Install**).
