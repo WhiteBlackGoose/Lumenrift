@@ -57,7 +57,7 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 
 ## Install it as an app
 
-LUMENRIFT is a Progressive Web App: it can be installed from the browser, launches fullscreen from your home screen, and works offline once installed.
+LUMENRIFT is a Progressive Web App: it can be installed from the browser, launches fullscreen from your home screen, and works offline once installed. The title screen and pause menu show an **Install app** link when installing is possible. It installs in one tap on Chrome/Edge, shows the exact steps on Firefox and Safari, and hides itself once the game is installed.
 - **Firefox (Android):** open [lumenrift.wbg.gg](https://lumenrift.wbg.gg), then **⋮ menu → Add app to Home screen** (on some versions it's **Install**).
 - **Chrome / Edge (Android or desktop):** use **Install app** in the menu, or the install icon in the address bar.
 - **Safari (iOS):** tap **⋯** (or the Share icon), choose **Share → Add to Home Screen**, and keep **Open as Web App** switched on. Note that iOS keeps a home-screen app's storage separate from Safari's, so saved games don't carry over between the two.

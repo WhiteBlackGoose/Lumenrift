@@ -1346,7 +1346,7 @@ body.touch #build-bar {
   }
   .diff {
     display: grid;
-    grid-template-columns: 7.5em minmax(0, 1fr);
+    grid-template-columns: 8.8em minmax(0, 1fr);
     align-items: center;
     column-gap: 10px;
     text-align: left;
@@ -1678,4 +1678,47 @@ body.touch #build-bar {
 }
 .save-row.fallen .save-hp i {
   background: #ff5d7a;
+}
+
+/* ------------------------------------------------------------------ install */
+.install-link {
+  color: var(--gold);
+  text-decoration-color: rgba(255, 210, 122, 0.35);
+}
+.install-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  box-shadow: 0 8px 30px rgba(255, 180, 70, 0.25);
+  margin-bottom: 10px;
+}
+.install-title {
+  font-size: clamp(24px, 6vw, 32px);
+}
+.install-step {
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+.install-step b {
+  color: var(--gold);
+}
+.install-step .ico {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+@media (max-width: 400px) {
+  .big-btn {
+    font-size: 17px;
+    letter-spacing: 0.06em;
+  }
 }

@@ -6,6 +6,7 @@ import { Building, Game, GameEvent, SaveData } from './game/game';
 import { isCoreTile } from './game/grid';
 import { Renderer, ViewState } from './render/renderer';
 import { Input } from './ui/input';
+import { initInstall } from './ui/install';
 import { deleteSession, listSessions, loadSession, newSessionId, saveSession } from './ui/sessions';
 import { saveBest } from './ui/storage';
 import { applyDocument, onLangChange, t } from './i18n';
@@ -60,6 +61,7 @@ class App implements AppApi {
     this.renderer = new Renderer(canvas);
     this.ui = new UI(this);
     onLangChange(() => this.ui.relocalize());
+    initInstall(() => this.ui.toast(t('install.done'), 'small info', 5));
     this.touch = matchMedia('(pointer: coarse)').matches;
     document.body.classList.toggle('touch', this.touch);
     new Input(canvas, {

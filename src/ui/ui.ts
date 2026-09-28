@@ -15,6 +15,7 @@ import {
 import { Building, Game, GameEvent } from '../game/game';
 import { drawIcon } from '../render/sprites';
 import { lang, LANG_ORDER, LANGS, Lang, setLang, StringKey, t } from '../i18n';
+import { installMode, onInstallChange, promptInstall } from './install';
 import { listSessions, SessionMeta } from './sessions';
 import { loadBest } from './storage';
 
@@ -129,6 +130,8 @@ export class UI {
   constructor(private app: AppApi) {
     this.root = document.getElementById('ui')!;
     this.buildHud();
+    // the install prompt can become available (or the app get installed) after a screen is already shown
+    onInstallChange(() => this.screenKind?.());
   }
 
   // ------------------------------------------------------------------ construction
@@ -725,7 +728,10 @@ export class UI {
     how.addEventListener('click', () => this.showHelp(() => this.showTitle()));
     const set_ = el('button', 'link-btn', t('title.settings'));
     set_.addEventListener('click', () => this.showSettings(() => this.showTitle()));
-    links.append(how, set_, this.langSelect());
+    links.append(how, set_);
+    const inst = this.installLink(() => this.showTitle());
+    if (inst) links.append(inst);
+    links.append(this.langSelect());
     card.append(links, aboutFooter());
     this.showScreen(card, false, () => this.showTitle());
   }
@@ -775,6 +781,36 @@ export class UI {
     return wrap;
   }
 
+  /** "Install app" link: one-tap install where the browser allows it, otherwise the right steps. */
+  private installLink(back: () => void): HTMLElement | null {
+    const mode = installMode();
+    if (!mode) return null;
+    const b = el('button', 'link-btn install-link', `⤓ ${t('install.button')}`);
+    b.addEventListener('click', async () => {
+      audio.unlock();
+      if (mode === 'prompt') {
+        await promptInstall();
+        back();
+      } else this.showInstallHelp(mode, back);
+    });
+    return b;
+  }
+
+  private showInstallHelp(mode: 'ios' | 'firefox-android' | 'mac-safari', back: () => void) {
+    const card = el('div', 'card glass install-card');
+    card.style.width = 'min(440px, 100%)';
+    const icon = el('img') as HTMLImageElement;
+    icon.src = './icon-192.png';
+    icon.alt = '';
+    icon.className = 'install-icon';
+    const step = mode === 'ios' ? 'install.ios' : mode === 'firefox-android' ? 'install.firefox' : 'install.mac';
+    card.append(icon, el('div', 'over-title win install-title', t('install.title')), el('div', 'over-sub', t('install.intro')), el('div', 'install-step', t(step)));
+    const ok = el('button', 'big-btn', t('settings.back'));
+    ok.addEventListener('click', back);
+    card.append(ok);
+    this.showScreen(card, false, () => this.showInstallHelp(mode, back));
+  }
+
   /** Compact language dropdown. */
   private langSelect(): HTMLElement {
     const sel = el('select', 'lang-select') as HTMLSelectElement;
@@ -815,6 +851,8 @@ export class UI {
     const st = el('button', 'link-btn', t('title.settings'));
     st.addEventListener('click', () => this.showSettings(() => this.showMenu()));
     links.append(how, st);
+    const inst = this.installLink(() => this.showMenu());
+    if (inst) links.append(inst);
     card.append(links, aboutFooter());
     this.showScreen(card, true, () => this.showMenu());
   }
