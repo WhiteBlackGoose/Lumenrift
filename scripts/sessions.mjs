@@ -7,12 +7,15 @@ const base = process.argv[2] ?? 'http://localhost:5173/';
 const out = process.argv[3] ?? 'shots/sessions';
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? 'chromium' });
+const DAY = process.env.REALM === 'day';
+const Word = DAY ? 'Day' : 'Night', word = DAY ? 'day' : 'night';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const fails = [];
 const check = (cond, msg) => (cond ? console.log('ok   ', msg) : (fails.push(msg), console.log('FAIL ', msg)));
 
 for (const [name, viewport, mobile] of [['desktop', { width: 1280, height: 800 }, false], ['phone', { width: 390, height: 844 }, true]]) {
   const ctx = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile, locale: 'en-US' });
+  if (process.env.REALM) await ctx.addInitScript((r) => localStorage.setItem('lumen.realm', r), process.env.REALM);
   let p = await ctx.newPage();
   p.on('pageerror', (e) => fails.push(`${name} pageerror ${e.message}`));
   await p.goto(base);
@@ -39,7 +42,7 @@ for (const [name, viewport, mobile] of [['desktop', { width: 1280, height: 800 }
   const rows = await p.locator('.save-row').count();
   check(rows === 1, `${name}: title offers the saved game (${rows} row)`);
   const txt = await p.locator('.save-row').first().innerText();
-  check(txt.includes(`Night ${before.wave}`), `${name}: save shows night ${before.wave}: "${txt.replace(/\n/g, ' | ')}"`);
+  check(txt.includes(`${Word} ${before.wave}`), `${name}: save shows ${word} ${before.wave}: "${txt.replace(/\n/g, ' | ')}"`);
   await p.screenshot({ path: `${out}/${name}-title.png` });
   await p.locator('.save-go').first().click();
   await wait(600);

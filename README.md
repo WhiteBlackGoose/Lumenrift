@@ -22,7 +22,8 @@ Something has torn the world open. **Rifts** bleed shadows onto the land, and ea
 
 You build around it. Walls bend the shadows' path, towers burn them away, crystal harvesters pay for the next line of defence, and every time you **ascend the Beacon** a new tier of weapons opens up. Hold out through thirty nights, including three boss nights and a final **Eclipse**, and the dawn breaks. Or keep going into endless night and see how long the light lasts.
 
-- 🗺️ **Procedural maps.** Every run has a new layout of rocks, crystal veins and rift sites.
+- ☀️ **Two campaigns.** **Night** pits the Beacon against the shadows. **Day** is a sunlit marble sky-garden where winged guardians defend the Sanctum from the Blight. It has its own structures, enemies, currency, landscape and music.
+- 🗺️ **Procedural maps.** Every run has a new layout of rocks or ruins, ponds, groves, resource patches and rift sites.
 - 🧱 **Real mazing.** Shadows follow a live flow field, so every wall you place re-routes them. A glowing trail shows the current path.
 - 🏰 **13 structures in 5 tiers, each with 3 upgrade levels.** From cheap walls and spike traps up to chain-lightning coils, ramping prism beams and a Sun Obelisk that calls down pillars of fire.
 - 👁️ **9 kinds of shadow.** Swarmers, flyers that ignore your maze, wall-smashing brutes, healers, armoured beetles, egg-sacs that burst into more enemies, and two bosses.
@@ -48,6 +49,10 @@ You build around it. Walls bend the shadows' path, towers burn them away, crysta
 <tr>
 <td><img src="docs/img/overview.jpg" alt="Overview of a defence at night 18 with the pink path trails winding to the Beacon"><br><sub><b>Build phase.</b> The pink trails show exactly where the shadows will walk.</sub></td>
 <td><img src="docs/img/maze.jpg" alt="Mid-game defence at night 23 with three rifts open"><br><sub><b>Three rifts, one light.</b> Night 23.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/img/day-overview.jpg" alt="Day realm: the marble Sanctum on a sunlit sky-island, ringed by winged sentinels and bells, with blight-wells at the edges"><br><sub><b>Day: the Sanctum.</b> A sunlit sky-garden besieged by the Blight.</sub></td>
+<td><img src="docs/img/day-close.jpg" alt="Close-up of the day defence: Plume Sentinels, Resonance Bells, windcatchers and honey snares around the Sanctum's golden dome"><br><sub><b>Winged guardians.</b> Sentinels, bells, windcatchers and honey snares hold the line.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/img/languages.jpg" alt="The title screen in several languages"><br><sub><b>Eight languages</b>, detected from your system.</sub></td>
@@ -101,6 +106,30 @@ LUMENRIFT is a Progressive Web App: it can be installed from the browser, launch
 | 🪲 | **Carapace** | Heavy plating blunts weak hits. |
 | 👑 | **Gloom Colossus** | Boss. Crushes walls and sheds shades as it walks. |
 | 🐉 | **Night Wyrm** | Flying boss that sheds wraiths from its coils. |
+
+### Day: the Sanctum and the Blight
+
+Pick **Day** on the title screen for the second campaign. Here the Blight, a creeping rot of moss, thorns and spores, crawls out of blight-wells toward the **Sanctum**, a marble pavilion around a captive sun. You defend it with winged statues and sky-machines. Instead of aether you spend **plumes**, golden feathers gathered by Aviaries on flower meadows. You survive **days** rather than nights. In place of the Nova, the Sanctum's **Daybreak** dazzles every foe nearby, stunning them.
+
+The Day structures aren't reskins: each one plays differently.
+
+| Tier | Structure | What it does |
+|:---:|---|---|
+| 1 | **Colonnade** | Marble wall for mazing |
+| 1 | **Plume Sentinel** | Javelins that pierce through several foes in a line |
+| 1 | **Sun Glyph** | Floor rune that bursts with light when stepped on |
+| 1 | **Aviary** | Economy; doves gather plumes on flower meadows |
+| 2 | **Resonance Bell** | Shockwave pulses that hit everything around it |
+| 2 | **Windcatcher** | Blasts a foe backwards along its path |
+| 2 | **Honey Snare** | Roots whatever steps in it, then refills |
+| 3 | **Halo Ring** | Blades of light orbit the spire and cut everything nearby |
+| 3 | **Fountain of Mending** | Repairs structures and speeds up nearby towers |
+| 3 | **Falcon Roost** | Falcons that hunt on their own, flyers first |
+| 4 | **Sun Lens** | A beam that burns every foe along its line |
+| 4 | **Dawn Ballista** | Long-range, armour-piercing, double damage to the wounded |
+| 5 | **Winged Titan** | Leaps onto the densest crowd and stuns it with a slam |
+
+The Blight: **Rotlings**, **Gnat Swarms**, **Plague Moths** (flyers), **Thornback Boars** (wall-breakers), **Spore Mothers** (burst into gnats), **Mossweavers** (healers), **Husk Beetles** (armoured), and two bosses: the **Bramble Behemoth** and the **Plague Roc**.
 
 ### Controls
 
@@ -160,6 +189,16 @@ The game logic in `src/game` knows nothing about the screen. It runs at a **fixe
 - **The Obelisk** marks its target, tracks it for 0.85 s, then strikes.
 
 **Leaks.** Ordinary shadows that reach the Beacon dive into it and burn out, dealing a one-time chunk of damage, so Beacon health works like lives. Bosses stay and pound on it. An early prototype let every enemy attack continuously, which made one bad leak an instant loss, so that was changed.
+
+### Two realms, one engine
+
+Night and Day share the whole engine: pathing, waves, saves, respawns, sandbox and UI. Everything that differs lives in a **realm definition**:
+- its build order and Beacon/Sanctum levels;
+- the core ability (a slow or a stun);
+- starting money and rift schedule;
+- which enemies are in rotation.
+
+Enemies have a **role** (basic, fast, flyer, breaker, splitter, healer, armoured, ground boss, air boss). Wave generation and enemy abilities are driven by role rather than by name, so a "Siege" night sends Brutes while a "Stampede" day sends Boars. Text works the same way: any string can have a `@day` variant, which turns "Night 7" into "Day 7" and "aether" into "plumes" across all eight languages without branching the UI code.
 
 ### Waves
 

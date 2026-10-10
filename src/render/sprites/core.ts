@@ -1,5 +1,6 @@
 import { CORE_X, CORE_Y } from '../../game/config';
 import type { Game } from '../../game/game';
+import { drawSanctum } from './day-buildings';
 import { cached, facet, glow, ngon, poly, pxOf, rgba, shade } from './util';
 
 type C = CanvasRenderingContext2D;
@@ -93,6 +94,7 @@ function dais(c: C, L: number) {
 }
 
 export function drawCore(ctx: C, game: Game, t: number): void {
+  if (game.realm === 'day') return drawSanctum(ctx, game, t);
   const L = game.coreLevel;
   const cx = CORE_X + 0.5,
     cy = CORE_Y + 0.5;

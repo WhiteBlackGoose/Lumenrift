@@ -72,6 +72,7 @@ async function audit(p, tag) {
 
 for (const [name, w, h] of DEVICES) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, locale: process.env.LOCALE ?? 'en-US' });
+  if (process.env.REALM) await ctx.addInitScript((r) => localStorage.setItem('lumen.realm', r), process.env.REALM);
   const p = await ctx.newPage();
   p.on('pageerror', (e) => problems.push(`[${name}] pageerror ${e.message}`));
   await p.goto(base);

@@ -1,23 +1,24 @@
 import { audio } from '../audio/audio';
 import {
-  BUILD_ORDER,
   BUILDINGS,
   BuildingId,
-  CORE_LEVELS,
   DIFFICULTY,
   Difficulty,
   EnemyId,
   ENEMIES,
   LevelStats,
-  NOVA_COOLDOWN,
+  Realm,
+  REALMS,
   VICTORY_WAVE,
 } from '../game/config';
 import { Building, Game, GameEvent } from '../game/game';
 import { drawIcon } from '../render/sprites';
-import { lang, LANG_ORDER, LANGS, Lang, setLang, StringKey, t } from '../i18n';
+import { currentTextRealm, lang, LANG_ORDER, LANGS, Lang, setLang, setTextRealm, StringKey, t } from '../i18n';
 import { installMode, onInstallChange, promptInstall } from './install';
 import { listSessions, SessionMeta } from './sessions';
 import { loadBest } from './storage';
+
+const gemSm = '<span class="gem sm"></span>';
 
 export interface AppApi {
   game: Game | null;
@@ -28,6 +29,9 @@ export interface AppApi {
   paused: boolean;
   touch: boolean;
   difficulty: Difficulty;
+  /** Realm chosen on the title screen (for new games). */
+  realm: Realm;
+  setRealm(r: Realm): void;
   readonly inAttract: boolean;
   setPlacing(id: BuildingId | null): void;
   deselect(): void;
@@ -53,7 +57,10 @@ export interface AppApi {
 
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'O'];
-export const BUILD_KEYS: Record<string, BuildingId> = Object.fromEntries(BUILD_ORDER.map((id, i) => [KEYS[i], id]));
+/** Hotkeys for the build bar of a realm (1…= in bar order). */
+export function buildKeys(realm: Realm): Record<string, BuildingId> {
+  return Object.fromEntries(REALMS[realm].buildOrder.map((id, i) => [KEYS[i], id]));
+}
 
 const SVG = {
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
@@ -71,7 +78,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 }
 
-function iconCanvas(id: BuildingId | EnemyId | 'core', css: number): HTMLCanvasElement {
+function iconCanvas(id: BuildingId | EnemyId | 'core' | 'core-day', css: number): HTMLCanvasElement {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const c = document.createElement('canvas');
   c.width = c.height = Math.round(css * dpr);
@@ -82,7 +89,7 @@ function iconCanvas(id: BuildingId | EnemyId | 'core', css: number): HTMLCanvasE
 }
 
 const iconCache = new Map<string, HTMLCanvasElement>();
-function cachedIcon(id: BuildingId | EnemyId | 'core', css: number): HTMLCanvasElement {
+function cachedIcon(id: BuildingId | EnemyId | 'core' | 'core-day', css: number): HTMLCanvasElement {
   const key = id + ':' + css;
   let src = iconCache.get(key);
   if (!src) {
@@ -127,6 +134,14 @@ export class UI {
   private lastErrT = 0;
   previewCollapsed = window.innerWidth <= 900 || window.innerHeight <= 500;
 
+  /** The realm currently on screen (the running game's, else the one picked on the title). */
+  private get realm(): Realm {
+    return this.app.game?.realm ?? this.app.realm;
+  }
+  private get coreIcon(): 'core' | 'core-day' {
+    return this.realm === 'day' ? 'core-day' : 'core';
+  }
+
   constructor(private app: AppApi) {
     this.root = document.getElementById('ui')!;
     this.buildHud();
@@ -142,7 +157,7 @@ export class UI {
 
     this.coreStat = el('div', 'stat core-stat glass');
     this.coreStat.title = t('hud.coreTip');
-    const ci = cachedIcon('core', 28);
+    const ci = cachedIcon(this.coreIcon, 28);
     ci.style.width = ci.style.height = '28px';
     this.coreStat.append(ci);
     const bar = el('div', 'bar');
@@ -206,7 +221,7 @@ export class UI {
     bottom.id = 'hud-bottom';
     const buildBar = el('div', 'glass');
     buildBar.id = 'build-bar';
-    BUILD_ORDER.forEach((id, i) => {
+    REALMS[this.realm].buildOrder.forEach((id, i) => {
       const b = el('button', 'bbtn') as HTMLButtonElement;
       b.dataset.new = t('hud.new');
       b.append(cachedIcon(id, 42));
@@ -239,7 +254,7 @@ export class UI {
     this.novaBtn.title = t('hud.novaTip');
     this.novaBtn.addEventListener('click', () => this.app.nova());
     this.beaconBtn = el('button', 'abtn') as HTMLButtonElement;
-    const bi = cachedIcon('core', 30);
+    const bi = cachedIcon(this.coreIcon, 30);
     bi.style.width = bi.style.height = '30px';
     this.beaconBtn.append(bi);
     this.beaconBtn.insertAdjacentHTML('beforeend', `<span class="lbl">${t('hud.beacon')}</span><span class="sub"></span><span class="key">B</span>`);
@@ -316,7 +331,7 @@ export class UI {
       const bonus = Math.floor(g.buildTimer * 1.5);
       set('call', 'b' + secs + ':' + bonus, () => {
         this.callBtn.className = 'call-btn';
-        this.callBtn.innerHTML = `<span class="txt">${t('hud.callNight')}</span><span class="bonus">+${bonus}◆</span><span class="time">${secs}s</span>`;
+        this.callBtn.innerHTML = `<span class="txt">${t('hud.callNight')}</span><span class="bonus">+${bonus}${gemSm}</span><span class="time">${secs}s</span>`;
       });
     } else {
       const remaining = g.enemies.length + g.queued;
@@ -350,7 +365,7 @@ export class UI {
     }
 
     // nova
-    const cdF = g.novaCd / NOVA_COOLDOWN;
+    const cdF = g.novaCd / g.R.abilityCooldown;
     set('nova', Math.ceil(g.novaCd), () => {
       const ready = g.novaCd <= 0;
       this.novaBtn.classList.toggle('ready', ready);
@@ -498,7 +513,7 @@ export class UI {
     sb.title = g.phase === 'build' && b.freshSpend > 0 ? t('panel.sellFreshTip') : t('panel.sellTip');
     sb.addEventListener('click', () => this.app.sellSelected());
     actions.append(ub, sb);
-    if (def.kind === 'tower' && def.id !== 'obelisk' && def.id !== 'pyre') {
+    if (def.kind === 'tower' && !def.noTargeting) {
       const mb = el('button', 'act small') as HTMLButtonElement;
       mb.innerHTML = `◎ ${t(`mode.${b.mode}` as StringKey)}`;
       mb.title = t('panel.targetTip');
@@ -506,7 +521,7 @@ export class UI {
       actions.append(mb);
     }
     p.append(actions);
-    if (def.kind === 'tower' || def.kind === 'trap' || def.id === 'frost')
+    if (def.kind === 'tower' || def.kind === 'trap' || def.levels[b.level].damage !== undefined)
       p.append(el('div', 'kills', `<span>${t('panel.kills', { n: b.kills })}</span><span>${t('panel.damage', { n: fmt(b.dealt) })}</span>`));
   }
 
@@ -515,8 +530,8 @@ export class UI {
     p.classList.remove('hidden');
     p.innerHTML = '';
     const head = el('div', 'head');
-    head.append(cachedIcon('core', 48));
-    const pips = CORE_LEVELS.map((_, i) => `<i class="${i <= g.coreLevel ? 'on' : ''}"></i>`).join('');
+    head.append(cachedIcon(this.coreIcon, 48));
+    const pips = g.R.coreLevels.map((_, i) => `<i class="${i <= g.coreLevel ? 'on' : ''}"></i>`).join('');
     head.append(el('div', '', `<div class="name">${t('core.name')}</div><div class="lvl">${t('panel.level', { n: g.coreLevel + 1 })}<span class="pips">${pips}</span></div>`));
     const close = el('button', 'close', '×');
     close.addEventListener('click', () => this.app.deselect());
@@ -524,7 +539,7 @@ export class UI {
     p.append(head);
     p.append(el('div', 'blurb', t('core.blurb')));
     const C = g.core;
-    const N = g.coreLevel + 1 < CORE_LEVELS.length ? CORE_LEVELS[g.coreLevel + 1] : null;
+    const N = g.coreLevel + 1 < g.R.coreLevels.length ? g.R.coreLevels[g.coreLevel + 1] : null;
     const dl = el('dl', 'stats');
     const row = (k: string, v: string, nv?: string) => {
       dl.append(el('dt', '', k), el('dd', '', v + (nv && nv !== v ? `<span class="up">→ ${nv}</span>` : '')));
@@ -534,7 +549,7 @@ export class UI {
     row(t('core.nova'), String(C.nova), N ? String(N.nova) : undefined);
     p.append(dl);
     if (N) {
-      const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === g.coreLevel + 2).map(bname);
+      const unlocks = g.R.buildOrder.filter((id) => BUILDINGS[id].tier === g.coreLevel + 2).map(bname);
       if (unlocks.length) p.append(el('div', 'unlocks', t('core.unlocks', { list: unlocks.join(', ') })));
     }
     const actions = el('div', 'actions');
@@ -607,7 +622,7 @@ export class UI {
         break;
       }
       case 'waveClear':
-        if (!g.over) this.toast(`${t('toast.survived', { n: ev.wave })} &nbsp;<span style="color:var(--aether)">+${ev.bonus}◆</span>`, 'small info', 2.6);
+        if (!g.over) this.toast(`${t('toast.survived', { n: ev.wave })} &nbsp;<span style="color:var(--aether)">+${ev.bonus}${gemSm}</span>`, 'small info', 2.6);
         this.last.preview = null;
         break;
       case 'riftOpen':
@@ -617,7 +632,7 @@ export class UI {
         this.toast(`<div class="t1">${ename(ev.enemy)}</div><div class="t2">${elore(ev.enemy)}</div>`, 'big boss', 3);
         break;
       case 'coreUp': {
-        const unlocks = BUILD_ORDER.filter((id) => BUILDINGS[id].tier === ev.level + 1).map(bname);
+        const unlocks = g.R.buildOrder.filter((id) => BUILDINGS[id].tier === ev.level + 1).map(bname);
         this.toast(
           `<div class="t1">${t('toast.ascend')}</div><div class="t2">${unlocks.length ? t('toast.unlocked', { list: unlocks.join(' · ') }) : t('toast.level', { n: ev.level + 1 })}</div>`,
           'big',
@@ -692,12 +707,24 @@ export class UI {
     this.hideTip();
     const card = el('div', 'card glass');
     card.append(el('div', 'logo', 'LUMENRIFT'), el('div', 'tagline', t('title.tagline')));
+    // campaign picker: Night (the Beacon) or Day (the Sanctum)
+    const realms = el('div', 'realms');
+    for (const r of ['night', 'day'] as Realm[]) {
+      const b = el('button', 'realm-btn r-' + r + (r === this.app.realm ? ' sel' : ''));
+      b.innerHTML = `<span class="realm-ico">${r === 'day' ? '☀' : '☾'}</span><span class="realm-txt"><b>${t(`realm.${r}` as StringKey)}</b><span>${t(`realm.${r}Desc` as StringKey)}</span></span>`;
+      b.addEventListener('click', () => {
+        audio.unlock();
+        if (r !== this.app.realm) this.app.setRealm(r);
+      });
+      realms.append(b);
+    }
+    card.append(realms);
     const sessions = listSessions();
     if (sessions.length) {
       card.append(this.sessionList(sessions));
       card.append(el('div', 'section-h', t('saves.newGame')));
     }
-    const best = loadBest();
+    const best = loadBest(this.app.realm);
     const diffs = el('div', 'diffs');
     let chosen: Difficulty = this.app.difficulty;
     const cards: HTMLElement[] = [];
@@ -743,14 +770,15 @@ export class UI {
     sessions.forEach((s, i) => {
       const row = el('div', 'save-row' + (i === 0 ? ' latest' : '') + (s.fallen ? ' fallen' : ''));
       const info = el('div', 'save-info');
-      const night = t('toast.night', { n: s.night }) + (s.won ? ' ☀' : '');
-      const diffTag = `<span class="save-diff d-${s.difficulty}">${t(`diff.${s.difficulty}.label` as StringKey)}</span>`;
+      const sr = s.realm ?? 'night';
+      const night = dayAware(sr, () => t('toast.night', { n: s.night })) + (s.won ? ' ✦' : '');
+      const diffTag = `<span class="save-diff d-${s.difficulty}">${sr === 'day' ? '☀' : '☾'} ${dayAware(sr, () => t(`diff.${s.difficulty}.label` as StringKey))}</span>`;
       const bits = [
-        s.won ? t('saves.dawn') : s.fallen ? t('saves.fallen', { n: s.night }) : s.inNight ? t('saves.inNight') : '',
+        dayAware(sr, () => (s.won ? t('saves.dawn') : s.fallen ? t('saves.fallen', { n: s.night }) : s.inNight ? t('saves.inNight') : '')),
         (s.attempts ?? 1) > 1 ? t('over.attemptN', { n: s.attempts }) : '',
         relTime(s.updated),
       ].filter(Boolean);
-      info.innerHTML = `<div class="save-main"><b>${night}</b>${diffTag}<span class="save-hp"><i style="width:${Math.round(s.beacon * 100)}%"></i></span></div><div class="save-sub">${[...bits, ...(s.fallen ? [] : [t('saves.beacon', { p: Math.round(s.beacon * 100) })])].join(' · ')} · ⚔ ${fmt(s.kills)}</div>`;
+      info.innerHTML = `<div class="save-main"><b>${night}</b>${diffTag}<span class="save-hp"><i style="width:${Math.round(s.beacon * 100)}%"></i></span></div><div class="save-sub">${[...bits, ...(s.fallen ? [] : [dayAware(sr, () => t('saves.beacon', { p: Math.round(s.beacon * 100) }))])].join(' · ')} · ⚔ ${fmt(s.kills)}</div>`;
       info.title = new Date(s.updated).toLocaleString(lang());
       const resume = el('button', 'save-go', s.fallen ? `↺ ${t('saves.respawn')}` : `▶ ${t('saves.resume')}`) as HTMLButtonElement;
       resume.addEventListener('click', () => {
@@ -878,7 +906,7 @@ export class UI {
       <div class="bestiary"></div>
     </div>`;
     const best = card.querySelector('.bestiary')!;
-    for (const id of Object.keys(ENEMIES) as EnemyId[]) {
+    for (const id of (Object.keys(ENEMIES) as EnemyId[]).filter((k) => ENEMIES[k].realm === this.realm)) {
       const b = el('div', 'b');
       b.append(cachedIcon(id, 36));
       b.append(el('div', '', `<b>${ename(id)}</b>${elore(id)}`));
@@ -989,6 +1017,16 @@ function aboutFooter(): HTMLElement {
     `${t('about.source')}</a><span>·</span>` +
     `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">${t('about.license')}</a>`;
   return f;
+}
+
+/** Render text as it reads in another realm (saved games of either realm share the title list). */
+function dayAware(r: Realm, f: () => string): string {
+  setTextRealm(r);
+  try {
+    return f();
+  } finally {
+    setTextRealm(currentTextRealm());
+  }
 }
 
 /** "5 minutes ago" / "vor 2 Stunden" in the current language; plain date after a week. */

@@ -53,9 +53,26 @@ export function onLangChange(f: () => void) {
   listeners.add(f);
 }
 
+let textRealm: 'night' | 'day' = 'night';
+/** In the day realm, keys with a `@day` variant use it (e.g. "Night {n}" becomes "Day {n}"). */
+export function setTextRealm(r: 'night' | 'day') {
+  textRealm = r;
+}
+export function currentTextRealm(): 'night' | 'day' {
+  return realmForText;
+}
+/** The realm on screen; dayAware() borrows the text realm temporarily and restores this one. */
+let realmForText: 'night' | 'day' = 'night';
+export function setScreenRealm(r: 'night' | 'day') {
+  realmForText = r;
+  textRealm = r;
+}
+
 /** Translate a key, substituting {placeholders}. Falls back to English, then to the key itself. */
 export function t(key: StringKey, vars?: Record<string, string | number>): string {
-  let s = LANGS[current][key] ?? en[key] ?? key;
+  const d = LANGS[current];
+  const dk = (key + '@day') as StringKey;
+  let s = (textRealm === 'day' && (d[dk] ?? en[dk])) || d[key] || en[key] || key;
   if (vars) for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k]));
   return s;
 }

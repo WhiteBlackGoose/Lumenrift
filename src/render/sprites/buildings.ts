@@ -1,5 +1,6 @@
 import { BUILDINGS, BuildingId } from '../../game/config';
 import type { Building, Game } from '../../game/game';
+import { dayIconTall, drawDayBuilding } from './day-buildings';
 import { cached, facet, glow, hash, ngon, poly, pxOf, rgba, shade, TRng } from './util';
 
 type C = CanvasRenderingContext2D;
@@ -1073,6 +1074,7 @@ function mire(c: C, b: Building, t: number) {
 // ------------------------------------------------------------------ public
 
 export function drawBuilding(ctx: C, b: Building, t: number, game: Game): void {
+  if (drawDayBuilding(ctx, b, t, game)) return;
   const id = b.def.id;
   const col = b.def.color;
   const cx = b.x + 0.5,
@@ -1172,6 +1174,8 @@ export function fakeBuilding(id: BuildingId, x: number, y: number, level = 0): B
     kills: 0,
     dealt: 0,
     hurt: 0,
+    spin: 0.6,
+    buff: 0,
   };
 }
 
@@ -1207,13 +1211,21 @@ export function drawGhost(ctx: C, id: BuildingId, x: number, y: number, t: numbe
 
 export function drawBuildingIcon(ctx: C, id: BuildingId, size: number, t = 1.3) {
   ctx.save();
-  const tall = id === 'obelisk' ? 1 : id === 'frost' || id === 'tesla' || id === 'prism' || id === 'mender' || id === 'pyre' ? 0.5 : 0;
-  const k = size * (tall === 1 ? 0.6 : tall ? 0.8 : 0.92);
+  const tall =
+    BUILDINGS[id].realm === 'day'
+      ? dayIconTall(id)
+      : id === 'obelisk'
+        ? 1
+        : id === 'frost' || id === 'tesla' || id === 'prism' || id === 'mender' || id === 'pyre'
+          ? 0.5
+          : 0;
+  const k = size * (tall > 1 ? 0.42 : tall === 1 ? 0.6 : tall ? 0.8 : 0.92);
   ctx.translate(size / 2, size * (0.5 + tall * 0.14));
   ctx.scale(k, k);
   ctx.translate(-0.5, -0.5);
   if (id === 'harvester') glow(ctx, 0.5, 0.55, 0.6, '#3fd0ff', 0.35);
   const b = fakeBuilding(id, 0, 0);
+  b.uid = -1; // icon: compact variants (e.g. the halo's orbit)
   if (id === 'mender') b.firing = 0;
   drawBuilding(ctx, b, t, stubGame);
   ctx.restore();

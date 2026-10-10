@@ -4,7 +4,6 @@ import {
   BuildingDef,
   BuildingId,
   bountyScale,
-  CORE_LEVELS,
   CORE_X,
   CORE_Y,
   DIFFICULTY,
@@ -18,13 +17,12 @@ import {
   LevelStats,
   MAP_H,
   MAP_W,
-  NOVA_COOLDOWN,
-  NOVA_RADIUS,
+  Realm,
+  REALMS,
   SELL_REFUND,
-  START_MONEY,
   VICTORY_WAVE,
 } from './config';
-import { computeFlow, DIRS, generateMap, idx, inBounds, INF, isCoreTile, MapData, Terrain } from './grid';
+import { computeFlow, DIRS, generateMap, idx, inBounds, INF, isCoreTile, isSolid, MAP_VERSION, MapData, Terrain } from './grid';
 import type { StringKey } from '../i18n/en';
 import { Rng } from './rng';
 import { planWave, riftsOpenAt, WavePlan, WaveSpawn } from './waves';
@@ -52,6 +50,10 @@ export interface Building {
   kills: number;
   dealt: number;
   hurt: number; // render hint: recently damaged
+  /** Orbit angle (halo blades) / animation phase. */
+  spin: number;
+  /** Attack-speed bonus from nearby fountains (recomputed every step). */
+  buff: number;
 }
 
 export interface Enemy {
@@ -83,10 +85,12 @@ export interface Enemy {
   facing: number;
   bounty: number;
   elite: boolean;
+  /** Stunned / rooted for this many seconds (snare, titan slam, Daybreak). */
+  stunT: number;
 }
 
 export interface Projectile {
-  kind: 'bolt' | 'shell' | 'missile' | 'core';
+  kind: 'bolt' | 'shell' | 'missile' | 'core' | 'javelin' | 'falcon' | 'ballista';
   x: number;
   y: number;
   sx: number;
@@ -107,6 +111,14 @@ export interface Projectile {
   src: number;
   color: string;
   dead: boolean;
+  /** Javelin: enemies already struck and how many more it may pass through. */
+  hits?: number[];
+  pierceLeft?: number;
+  /** Ballista: double damage against targets below this hp fraction. */
+  execute?: number;
+  /** Falcon: seconds left to hunt, and its strike cooldown. */
+  life?: number;
+  cd?: number;
 }
 
 export interface Strike {
@@ -117,6 +129,9 @@ export interface Strike {
   damage: number;
   splash: number;
   src: number;
+  /** 'sun' = obelisk pillar; 'slam' = winged titan (stuns). */
+  kind?: 'sun' | 'slam';
+  stun?: number;
 }
 
 export type GameEvent =
@@ -144,6 +159,11 @@ export type GameEvent =
   | { type: 'heal'; x: number; y: number }
   | { type: 'thorns'; x: number; y: number }
   | { type: 'frost'; x: number; y: number; r: number }
+  | { type: 'pulse'; x: number; y: number; r: number; color: string }
+  | { type: 'gust'; x: number; y: number; tx: number; ty: number }
+  | { type: 'snare'; x: number; y: number }
+  | { type: 'slamWarn'; x: number; y: number; r: number }
+  | { type: 'slam'; x: number; y: number; r: number }
   | { type: 'error'; msg: StringKey; vars?: Record<string, string | number> }
   | { type: 'defeat' }
   | { type: 'victory' };
@@ -151,6 +171,9 @@ export type GameEvent =
 /** Everything needed to resume a game exactly where it was left (the map regenerates from the seed). */
 export interface SaveData {
   v: 1;
+  /** Missing in saves from before the day realm existed (= night, map version 1). */
+  realm?: Realm;
+  mapV?: number;
   seed: number;
   difficulty: Difficulty;
   rng: number;
@@ -185,6 +208,7 @@ export interface PlaceCheck {
 const DT = 1 / 60;
 
 export class Game {
+  readonly realm: Realm;
   readonly map: MapData;
   readonly seed: number;
   readonly difficulty: Difficulty;
@@ -201,11 +225,11 @@ export class Game {
   flowB = new Float32Array(MAP_W * MAP_H);
   flowVersion = 0;
 
-  money = START_MONEY;
+  money = 0;
   /** Sandbox mode: everything is free, the Beacon can't fall, nights start only when called. */
   readonly sandbox: boolean;
   coreLevel = 0;
-  coreHp = CORE_LEVELS[0].hp;
+  coreHp = 0;
   coreCd = 0;
   coreAngle = 0;
   coreHurt = 0;
@@ -230,20 +254,29 @@ export class Game {
   private byUid = new Map<number, Building>();
   private enemyByUid = new Map<number, Enemy>();
 
-  constructor(seed: number, difficulty: Difficulty) {
+  constructor(seed: number, difficulty: Difficulty, realm: Realm = 'night', mapVersion = MAP_VERSION) {
     this.seed = seed;
     this.difficulty = difficulty;
+    this.realm = realm;
+    this.mapVersion = mapVersion;
     this.rng = new Rng(seed ^ 0xabcdef);
-    this.map = generateMap(seed);
+    this.map = generateMap(seed, realm, mapVersion);
     this.buildingAt = new Int32Array(MAP_W * MAP_H);
-    this.money = Math.round(START_MONEY * DIFFICULTY[difficulty].money);
+    this.money = Math.round(this.R.startMoney * DIFFICULTY[difficulty].money);
+    this.coreHp = this.R.coreLevels[0].hp;
     this.sandbox = difficulty === 'sandbox';
     if (this.sandbox) {
       this.buildTimer = Infinity; // nights only start when called
       this.novaCd = 0;
     }
     this.recomputeFlow();
-    this.nextPlan = planWave(1, difficulty, seed);
+    this.nextPlan = planWave(1, difficulty, seed, realm);
+  }
+
+  readonly mapVersion: number;
+  /** This campaign's rules (structures, Beacon/Sanctum levels, ability, rifts…). */
+  get R() {
+    return REALMS[this.realm];
   }
 
   // ---------------------------------------------------------------- save / load
@@ -251,6 +284,8 @@ export class Game {
   toSave(): SaveData {
     return {
       v: 1,
+      realm: this.realm,
+      mapV: this.mapVersion,
       seed: this.seed,
       difficulty: this.difficulty,
       rng: this.rng.state,
@@ -278,7 +313,7 @@ export class Game {
   }
 
   static fromSave(d: SaveData): Game {
-    const g = new Game(d.seed, d.difficulty);
+    const g = new Game(d.seed, d.difficulty, d.realm ?? 'night', d.mapV ?? 1);
     g.rng.state = d.rng;
     g.uidSeq = d.uidSeq;
     g.money = d.money;
@@ -316,20 +351,20 @@ export class Game {
   // ---------------------------------------------------------------- queries
 
   get core() {
-    return CORE_LEVELS[this.coreLevel];
+    return this.R.coreLevels[this.coreLevel];
   }
   get coreMaxHp() {
     return this.core.hp;
   }
   get riftCount() {
-    return riftsOpenAt(Math.max(1, this.phase === 'build' ? this.wave + 1 : this.wave));
+    return riftsOpenAt(Math.max(1, this.phase === 'build' ? this.wave + 1 : this.wave), this.realm);
   }
   /** Rifts that exist now (including one that will open with the next wave, shown as forming). */
   activeRifts() {
-    return this.map.rifts.slice(0, riftsOpenAt(Math.max(1, this.wave)));
+    return this.map.rifts.slice(0, riftsOpenAt(Math.max(1, this.wave), this.realm));
   }
   formingRifts() {
-    return this.map.rifts.slice(riftsOpenAt(Math.max(1, this.wave)), riftsOpenAt(Math.max(1, this.wave + 1)));
+    return this.map.rifts.slice(riftsOpenAt(Math.max(1, this.wave), this.realm), riftsOpenAt(Math.max(1, this.wave + 1), this.realm));
   }
   buildingByUid(uid: number) {
     return this.byUid.get(uid);
@@ -355,14 +390,14 @@ export class Game {
     return Math.floor(b.freshSpend + (b.invested - b.freshSpend) * SELL_REFUND);
   }
   coreUpgradeCost(): number | null {
-    return this.coreLevel + 1 < CORE_LEVELS.length ? CORE_LEVELS[this.coreLevel + 1].upgradeCost : null;
+    return this.coreLevel + 1 < this.R.coreLevels.length ? this.R.coreLevels[this.coreLevel + 1].upgradeCost : null;
   }
 
   // ---------------------------------------------------------------- flow fields
 
   private groundCost(i: number, extraBlock = -1): number {
     const t = this.map.terrain[i];
-    if (t === Terrain.Rock || t === Terrain.Core) return INF;
+    if (isSolid(t) || t === Terrain.Core) return INF;
     if (i === extraBlock) return INF;
     const u = this.buildingAt[i];
     if (u) {
@@ -374,7 +409,7 @@ export class Game {
 
   private breakerCost(i: number): number {
     const t = this.map.terrain[i];
-    if (t === Terrain.Rock || t === Terrain.Core) return INF;
+    if (isSolid(t) || t === Terrain.Core) return INF;
     const u = this.buildingAt[i];
     if (u) {
       const b = this.byUid.get(u)!;
@@ -399,6 +434,8 @@ export class Game {
     const i = idx(x, y);
     const t = this.map.terrain[i];
     if (t === Terrain.Rock) return { ok: false, reason: 'err.rock' };
+    if (t === Terrain.Water) return { ok: false, reason: 'err.water' };
+    if (t === Terrain.Tree) return { ok: false, reason: 'err.tree' };
     if (t === Terrain.Core) return { ok: false, reason: 'err.core' };
     if (t === Terrain.Rift) return { ok: false, reason: 'err.rift' };
     if (this.buildingAt[i]) return { ok: false, reason: 'err.occupied' };
@@ -457,6 +494,8 @@ export class Game {
       kills: 0,
       dealt: 0,
       hurt: 0,
+      spin: 0,
+      buff: 0,
     };
     this.buildings.push(b);
     this.byUid.set(b.uid, b);
@@ -530,7 +569,7 @@ export class Game {
     if (!this.sandbox || this.phase !== 'build') return;
     n = Math.max(1, Math.min(99, Math.round(n)));
     this.wave = n - 1;
-    this.nextPlan = planWave(n, this.difficulty, this.seed);
+    this.nextPlan = planWave(n, this.difficulty, this.seed, this.realm);
     this.recomputeFlow();
   }
 
@@ -551,19 +590,22 @@ export class Game {
 
   nova(): boolean {
     if (this.novaCd > 0 || this.over) return false;
-    this.novaCd = this.sandbox ? 5 : NOVA_COOLDOWN;
+    this.novaCd = this.sandbox ? 5 : this.R.abilityCooldown;
     const cx = CORE_X + 0.5,
       cy = CORE_Y + 0.5;
     for (const e of this.enemies) {
       if (e.dead) continue;
       const d = Math.hypot(e.x - cx, e.y - cy);
-      if (d <= NOVA_RADIUS) {
+      if (d <= this.R.abilityRadius) {
         this.damageEnemy(e, this.core.nova * (d < 2.5 ? 1 : 0.7), 99, -1);
-        e.slowT = 3;
-        e.slowAmt = 0.5;
+        if (this.R.abilityStun > 0) e.stunT = Math.max(e.stunT, this.R.abilityStun); // Daybreak dazzles
+        else {
+          e.slowT = 3; // Nova chills
+          e.slowAmt = 0.5;
+        }
       }
     }
-    this.events.push({ type: 'nova', r: NOVA_RADIUS });
+    this.events.push({ type: 'nova', r: this.R.abilityRadius });
     return true;
   }
 
@@ -615,7 +657,7 @@ export class Game {
 
   private startWave() {
     this.wave++;
-    const newRifts = this.map.rifts.slice(riftsOpenAt(this.wave - 1), riftsOpenAt(this.wave));
+    const newRifts = this.map.rifts.slice(riftsOpenAt(this.wave - 1, this.realm), riftsOpenAt(this.wave, this.realm));
     if (this.wave > 1) for (const r of newRifts) this.events.push({ type: 'riftOpen', x: r.x + 0.5, y: r.y + 0.5 });
     this.phase = 'wave';
     this.waveTime = 0;
@@ -639,7 +681,7 @@ export class Game {
     this.money += bonus;
     this.stats.earned += bonus;
     this.events.push({ type: 'waveClear', wave: this.wave, bonus });
-    this.nextPlan = planWave(this.wave + 1, this.difficulty, this.seed);
+    this.nextPlan = planWave(this.wave + 1, this.difficulty, this.seed, this.realm);
     if (this.wave >= VICTORY_WAVE && !this.won && !this.endless && !this.sandbox) {
       this.won = true;
       this.over = true;
@@ -694,6 +736,7 @@ export class Game {
       facing: 0,
       bounty: def.bounty * bountyScale(this.wave) * DIFFICULTY[this.difficulty].money,
       elite: false,
+      stunT: 0,
     };
     this.enemies.push(e);
     this.enemyByUid.set(e.uid, e);
@@ -723,12 +766,15 @@ export class Game {
       e.abilityCd -= dt;
       if (e.abilityCd <= 0) this.enemyAbility(e);
 
-      const speed = e.def.speed * (1 - Math.min(0.8, e.slow));
+      if (e.stunT > 0) e.stunT -= dt;
+      const speed = e.stunT > 0 ? 0 : e.def.speed * (1 - Math.min(0.8, e.slow));
       e.slow = 0; // re-applied each frame by auras
       const px = e.x,
         py = e.y;
 
-      if (e.attacking >= 0) {
+      if (e.stunT > 0) {
+        // stunned: neither moves nor attacks
+      } else if (e.attacking >= 0) {
         this.enemyAttack(e, dt);
       } else if (e.def.flying) {
         const dx = cx - e.x,
@@ -903,8 +949,8 @@ export class Game {
   }
 
   private enemyAbility(e: Enemy) {
-    switch (e.def.id) {
-      case 'warden': {
+    switch (e.def.role) {
+      case 'healer': {
         e.abilityCd = 1.2;
         let any = false;
         for (const o of this.enemies) {
@@ -917,16 +963,12 @@ export class Game {
         if (any) this.events.push({ type: 'heal', x: e.x, y: e.y });
         break;
       }
-      case 'colossus': {
-        e.abilityCd = 7;
-        if (e.attacking >= 0) break;
-        for (let i = 0; i < 3; i++) this.spawnMinion('shade', e);
-        break;
-      }
-      case 'wyrm': {
-        e.abilityCd = 6;
-        if (e.attacking >= 0) break;
-        for (let i = 0; i < 2; i++) this.spawnMinion('wraith', e);
+      case 'bossGround':
+      case 'bossAir': {
+        const sp = e.def.spawns!;
+        e.abilityCd = sp.every ?? 7;
+        if (e.attacking >= 0) break; // no summoning while pounding the core
+        for (let i = 0; i < sp.n; i++) this.spawnMinion(sp.id, e);
         break;
       }
       default:
@@ -972,9 +1014,10 @@ export class Game {
       const b = this.byUid.get(src);
       if (b) b.kills++;
     }
-    if (e.def.id === 'brood') {
-      for (let i = 0; i < 3; i++) {
-        const s = this.makeEnemy(ENEMIES.skitter, e.x, e.y, ENEMIES.skitter.hp * hpScale(this.wave) * DIFFICULTY[this.difficulty].hp);
+    if (e.def.role === 'splitter' && e.def.spawns) {
+      const sd = ENEMIES[e.def.spawns.id];
+      for (let i = 0; i < e.def.spawns.n; i++) {
+        const s = this.makeEnemy(sd, e.x, e.y, sd.hp * hpScale(this.wave) * DIFFICULTY[this.difficulty].hp);
         s.bounty *= 0.5;
       }
     }
@@ -1030,17 +1073,237 @@ export class Game {
     return best;
   }
 
+  /** Fountains quicken nearby towers: recompute every tower's attack-speed bonus. */
+  private applyBuffs() {
+    for (const b of this.buildings) b.buff = 0;
+    for (const f of this.buildings) {
+      if (f.def.id !== 'fountain') continue;
+      const L = f.def.levels[f.level];
+      const r2 = L.range! * L.range!;
+      for (const b of this.buildings) {
+        if (b === f || b.def.kind !== 'tower') continue;
+        if ((b.x - f.x) ** 2 + (b.y - f.y) ** 2 <= r2) b.buff = Math.max(b.buff, L.buff!);
+      }
+    }
+  }
+
+  /** Is a ground unit allowed to stand at this point? (used by knockback) */
+  private walkable(x: number, y: number): boolean {
+    const tx = Math.floor(x),
+      ty = Math.floor(y);
+    if (!inBounds(tx, ty) || isCoreTile(tx, ty)) return false;
+    return this.groundCost(idx(tx, ty)) < INF;
+  }
+
   private updateBuildings(dt: number) {
+    if (this.realm === 'day') this.applyBuffs();
     for (const b of this.buildings) {
       const L = b.def.levels[b.level];
       const bx = b.x + 0.5,
         by = b.y + 0.5;
-      if (b.cd > 0) b.cd -= dt;
+      if (b.cd > 0) b.cd -= dt * (1 + b.buff);
       if (b.firing > 0) b.firing -= dt;
       if (b.recoil > 0) b.recoil = Math.max(0, b.recoil - dt * 4);
       if (b.hurt > 0) b.hurt -= dt;
 
       switch (b.def.id) {
+        // ================================================================== day structures
+        case 'javelin': {
+          if (b.cd > 0) break;
+          const t = this.findTarget(bx, by, L.range!, 'both', b.mode);
+          if (!t) break;
+          b.angle = Math.atan2(t.y - by, t.x - bx);
+          b.cd = 1 / L.rate!;
+          b.recoil = 1;
+          const p = this.fireProjectile('javelin', b, t, L.damage!, 0, 15, '#ffe2a0');
+          // flies straight along the aim line, through up to `pierce` foes
+          p.vx = Math.cos(b.angle) * 15;
+          p.vy = Math.sin(b.angle) * 15;
+          p.flight = L.range! + 1.5;
+          p.hits = [];
+          p.pierceLeft = L.pierce!;
+          break;
+        }
+        case 'glyph': {
+          if (b.cd > 0) break;
+          const on = this.enemies.some((e) => !e.dead && !e.def.flying && Math.abs(e.x - bx) < 0.55 && Math.abs(e.y - by) < 0.55);
+          if (!on) break;
+          b.cd = 1 / L.rate!;
+          b.firing = 0.35;
+          this.explode(bx, by, L.splash!, L.damage!, 6, b.uid, false, true, '#ffd76a');
+          this.events.push({ type: 'shoot', kind: 'glyph', x: bx, y: by, tx: bx, ty: by });
+          break;
+        }
+        case 'bell': {
+          if (b.cd > 0) break;
+          const r2 = L.range! * L.range!;
+          const near = this.enemies.filter((e) => !e.dead && e.age > 0.15 && (e.x - bx) ** 2 + (e.y - by) ** 2 <= r2);
+          if (!near.length) break;
+          b.cd = 1 / L.rate!;
+          b.firing = 0.4;
+          b.recoil = 1;
+          for (const e of near) this.damageEnemy(e, L.damage!, 3, b.uid);
+          this.events.push({ type: 'pulse', x: bx, y: by, r: L.range!, color: b.def.color });
+          this.events.push({ type: 'shoot', kind: 'bell', x: bx, y: by, tx: bx, ty: by });
+          break;
+        }
+        case 'windcatcher': {
+          if (b.cd > 0) break;
+          const t = this.findTarget(bx, by, L.range!, 'ground', b.mode);
+          if (!t) break;
+          b.cd = 1 / L.rate!;
+          b.firing = 0.3;
+          b.angle = Math.atan2(t.y - by, t.x - bx);
+          // blow the target away from the tower, as far as open ground allows
+          const d = Math.hypot(t.x - bx, t.y - by) || 1;
+          const ux = (t.x - bx) / d,
+            uy = (t.y - by) / d;
+          const push = L.push! * (t.def.boss ? 0.35 : 1);
+          for (let k = push; k > 0.05; k -= 0.2) {
+            const nx = t.x + ux * k,
+              ny = t.y + uy * k;
+            if (this.walkable(nx, ny)) {
+              this.events.push({ type: 'gust', x: bx, y: by, tx: nx, ty: ny });
+              t.x = nx;
+              t.y = ny;
+              t.hasWp = false;
+              t.attacking = -1;
+              break;
+            }
+          }
+          this.damageEnemy(t, L.damage!, 0, b.uid);
+          this.events.push({ type: 'shoot', kind: 'windcatcher', x: bx, y: by, tx: t.x, ty: t.y });
+          break;
+        }
+        case 'snare': {
+          if (b.cd > 0) break;
+          const caught = this.enemies.filter((e) => !e.dead && !e.def.flying && Math.abs(e.x - bx) < 0.55 && Math.abs(e.y - by) < 0.55);
+          if (!caught.length) break;
+          b.cd = 1 / L.rate!;
+          b.firing = 1 / L.rate!; // render hint: drained while recharging
+          for (const e of caught) {
+            e.stunT = Math.max(e.stunT, L.stun! * (e.def.boss ? 0.3 : 1));
+            if (L.damage) this.damageEnemy(e, L.damage, 99, b.uid);
+          }
+          this.events.push({ type: 'snare', x: bx, y: by });
+          break;
+        }
+        case 'halo': {
+          b.spin += dt * 2.4 * (1 + b.buff);
+          const r = L.range!;
+          let any = false;
+          for (const e of this.enemies) {
+            if (e.dead) continue;
+            const d = Math.hypot(e.x - bx, e.y - by);
+            if (d > r + e.def.radius || d < 0.35) continue;
+            this.damageEnemy(e, L.damage! * dt * (1 + b.buff), 2, b.uid, true);
+            any = true;
+          }
+          if (any) {
+            b.firing = 0.1;
+            if (b.cd <= 0) {
+              b.cd = 0.45;
+              this.events.push({ type: 'shoot', kind: 'halo', x: bx, y: by, tx: bx, ty: by });
+            }
+          }
+          break;
+        }
+        case 'fountain': {
+          b.spin += dt;
+          const r2 = L.range! ** 2;
+          for (const o of this.buildings) {
+            if (o === b || o.hp >= o.maxHp) continue;
+            if ((o.x - b.x) ** 2 + (o.y - b.y) ** 2 > r2) continue;
+            o.hp = Math.min(o.maxHp, o.hp + L.heal! * dt);
+          }
+          if (this.coreRectDist(bx, by) <= L.range! && this.coreHp < this.coreMaxHp) this.coreHp = Math.min(this.coreMaxHp, this.coreHp + (L.heal! / 4) * dt);
+          break;
+        }
+        case 'falconry': {
+          if (b.cd > 0) break;
+          const aloft = this.projectiles.filter((p) => p.kind === 'falcon' && p.src === b.uid && !p.dead).length;
+          if (aloft >= L.shots!) break;
+          const t = this.findTarget(bx, by, L.range!, 'both', 'close', 0, true);
+          if (!t) break;
+          b.cd = 1 / L.rate!;
+          b.firing = 0.4;
+          const p = this.fireProjectile('falcon', b, t, L.damage!, 0, 6.5, '#ffe6b0');
+          p.life = L.duration!;
+          p.cd = 0;
+          p.pierce = 2;
+          const a = Math.random() * Math.PI * 2;
+          p.vx = Math.cos(a) * 3;
+          p.vy = Math.sin(a) * 3 - 2;
+          break;
+        }
+        case 'lens': {
+          let t = b.targetUid ? this.enemyByUid.get(b.targetUid) : undefined;
+          if (!t || t.dead || (t.x - bx) ** 2 + (t.y - by) ** 2 > L.range! ** 2) {
+            const n = this.findTarget(bx, by, L.range!, 'both', b.mode);
+            b.targetUid = n ? n.uid : 0;
+            t = n ?? undefined;
+          }
+          if (!t) break;
+          b.angle = Math.atan2(t.y - by, t.x - bx);
+          b.firing = 0.1;
+          // burn every foe lying along the beam, out to the target
+          const len = Math.hypot(t.x - bx, t.y - by) || 1;
+          const ux = (t.x - bx) / len,
+            uy = (t.y - by) / len;
+          for (const e of this.enemies) {
+            if (e.dead) continue;
+            const ex = e.x - bx,
+              ey = (e.def.flying ? e.y : e.y) - by;
+            const along = ex * ux + ey * uy;
+            if (along < 0.3 || along > len + 0.3) continue;
+            const off = Math.abs(ex * uy - ey * ux);
+            if (off > 0.32 + e.def.radius * 0.6) continue;
+            this.damageEnemy(e, L.damage! * dt * (1 + b.buff), 3, b.uid, true);
+          }
+          if (b.cd <= 0) {
+            b.cd = 0.5;
+            this.events.push({ type: 'shoot', kind: 'lens', x: bx, y: by, tx: t.x, ty: t.y });
+          }
+          break;
+        }
+        case 'ballista': {
+          if (b.cd > 0) break;
+          const t = this.findTarget(bx, by, L.range!, 'both', b.mode);
+          if (!t) break;
+          b.angle = Math.atan2(t.y - by, t.x - bx);
+          b.cd = 1 / L.rate!;
+          b.recoil = 1;
+          const p = this.fireProjectile('ballista', b, t, L.damage!, 0, 18, '#fff0c8');
+          p.pierce = 8;
+          p.execute = L.execute;
+          break;
+        }
+        case 'titan': {
+          b.spin += dt;
+          if (b.cd > 0) break;
+          // leap onto the densest knot of foes in reach
+          const r2 = L.range! ** 2,
+            s2 = L.splash! ** 2;
+          const cands = this.enemies.filter((e) => !e.dead && e.age > 0.3 && (e.x - bx) ** 2 + (e.y - by) ** 2 <= r2);
+          if (!cands.length) break;
+          let best = cands[0],
+            bs = -1;
+          for (const c of cands) {
+            let n = 0;
+            for (const o of cands) if ((o.x - c.x) ** 2 + (o.y - c.y) ** 2 <= s2) n += o.def.boss ? 4 : 1;
+            if (n > bs || (n === bs && c.hp > best.hp)) {
+              bs = n;
+              best = c;
+            }
+          }
+          b.cd = 1 / L.rate!;
+          b.firing = 1.4;
+          b.angle = Math.atan2(best.y - by, best.x - bx);
+          this.strikes.push({ x: best.x, y: best.y, targetUid: best.uid, t: 1.0, damage: L.damage!, splash: L.splash!, src: b.uid, kind: 'slam', stun: L.stun });
+          this.events.push({ type: 'slamWarn', x: best.x, y: best.y, r: L.splash! });
+          break;
+        }
+        // ================================================================== night structures
         case 'arbalest': {
           if (b.cd > 0) break;
           const t = this.findTarget(bx, by, L.range!, 'both', b.mode);
@@ -1308,6 +1571,14 @@ export class Game {
         }
         continue;
       }
+      if (p.kind === 'javelin') {
+        this.stepJavelin(p, dt);
+        continue;
+      }
+      if (p.kind === 'falcon') {
+        this.stepFalcon(p, dt);
+        continue;
+      }
       let t = this.enemyByUid.get(p.targetUid);
       if (t && t.dead) t = undefined;
       if (!t && p.kind === 'missile') {
@@ -1353,14 +1624,78 @@ export class Game {
       if (d <= step + 0.1) {
         p.dead = true;
         if (t) {
-          this.damageEnemy(t, p.damage, 0, p.src);
-          this.events.push({ type: 'hit', x: t.x, y: t.y, color: p.color });
+          const exec = p.execute && t.hp / t.maxHp < p.execute ? 2 : 1;
+          this.damageEnemy(t, p.damage * exec, p.pierce, p.src);
+          this.events.push({ type: 'hit', x: t.x, y: t.y, color: exec > 1 ? '#ffffff' : p.color });
         }
       } else {
         p.x += (dx / d) * step;
         p.y += (dy / d) * step;
       }
       if (p.t > 3) p.dead = true;
+    }
+  }
+
+  /** Javelin: flies straight, striking each foe it passes once, until its pierce is spent. */
+  private stepJavelin(p: Projectile, dt: number) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.t * p.speed > p.flight || !inBounds(Math.floor(p.x), Math.floor(p.y))) {
+      p.dead = true;
+      return;
+    }
+    for (const e of this.enemies) {
+      if (e.dead || p.hits!.includes(e.uid)) continue;
+      const ey = e.y - (e.def.flying ? 0 : 0);
+      if ((e.x - p.x) ** 2 + (ey - p.y) ** 2 > (0.3 + e.def.radius) ** 2) continue;
+      p.hits!.push(e.uid);
+      this.damageEnemy(e, p.damage, 1, p.src);
+      this.events.push({ type: 'hit', x: e.x, y: e.y, color: p.color });
+      if (--p.pierceLeft! <= 0) {
+        p.dead = true;
+        return;
+      }
+    }
+  }
+
+  /** Falcon: hunts near its roost (flyers first), strikes repeatedly, then flies off when its time is up. */
+  private stepFalcon(p: Projectile, dt: number) {
+    p.life! -= dt;
+    p.cd! -= dt;
+    const roost = this.byUid.get(p.src);
+    if (p.life! <= 0 || !roost) {
+      p.dead = true;
+      this.events.push({ type: 'hit', x: p.x, y: p.y, color: '#ffe6b0' });
+      return;
+    }
+    const L = roost.def.levels[roost.level];
+    const rx = roost.x + 0.5,
+      ry = roost.y + 0.5;
+    const leash = L.range! * 1.3;
+    let t = this.enemyByUid.get(p.targetUid);
+    if (!t || t.dead || (t.x - rx) ** 2 + (t.y - ry) ** 2 > leash * leash) {
+      const n = this.findTarget(rx, ry, L.range!, 'both', 'close', 0, true);
+      p.targetUid = n ? n.uid : 0;
+      t = n ?? undefined;
+    }
+    // with no prey, circle above the roost
+    const gx = t ? t.x : rx + Math.cos(this.time * 2 + p.src) * 0.9;
+    const gy = t ? t.y : ry - 0.6 + Math.sin(this.time * 2 + p.src) * 0.6;
+    const dx = gx - p.x,
+      dy = gy - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const k = Math.min(1, dt * 5);
+    p.vx += ((dx / d) * p.speed - p.vx) * k;
+    p.vy += ((dy / d) * p.speed - p.vy) * k;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (t && d < 0.35 + t.def.radius && p.cd! <= 0) {
+      p.cd = 0.8;
+      this.damageEnemy(t, p.damage * (1 + roost.buff), p.pierce, p.src);
+      this.events.push({ type: 'hit', x: t.x, y: t.y, color: p.color });
+      // bounce off after the strike
+      p.vx = -p.vx * 0.6 + (Math.random() - 0.5) * 3;
+      p.vy = -p.vy * 0.6 - 2;
     }
   }
 
@@ -1399,8 +1734,15 @@ export class Game {
       }
       s.t -= dt;
       if (s.t <= 0) {
-        this.explode(s.x, s.y, s.splash, s.damage, 99, s.src, true, true, '#fff1a8', t && !t.dead ? t : undefined);
-        this.events.push({ type: 'strike', x: s.x, y: s.y, r: s.splash });
+        if (s.kind === 'slam') {
+          this.explode(s.x, s.y, s.splash, s.damage, 6, s.src, true, true, '#fff6dc', t && !t.dead ? t : undefined);
+          for (const e of this.enemies)
+            if (!e.dead && (e.x - s.x) ** 2 + (e.y - s.y) ** 2 <= (s.splash + e.def.radius) ** 2) e.stunT = Math.max(e.stunT, (s.stun ?? 1) * (e.def.boss ? 0.4 : 1));
+          this.events.push({ type: 'slam', x: s.x, y: s.y, r: s.splash });
+        } else {
+          this.explode(s.x, s.y, s.splash, s.damage, 99, s.src, true, true, '#fff1a8', t && !t.dead ? t : undefined);
+          this.events.push({ type: 'strike', x: s.x, y: s.y, r: s.splash });
+        }
       }
     }
     this.strikes = this.strikes.filter((s) => s.t > 0);

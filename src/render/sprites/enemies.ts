@@ -1,5 +1,6 @@
 import { ENEMIES, EnemyId } from '../../game/config';
 import type { Enemy } from '../../game/game';
+import { DAY_DRAW } from './day-enemies';
 import { mix, rgba, shade } from './util';
 
 type C = CanvasRenderingContext2D;
@@ -8,9 +9,9 @@ const TAU = Math.PI * 2;
 /** Vertical offset (tiles) at which flyers are drawn above their ground position. */
 export const FLY_HEIGHT = 0.45;
 
-type Mode = 'body' | 'glow';
+export type Mode = 'body' | 'glow';
 
-interface Pose {
+export interface Pose {
   x: number;
   y: number;
   s: number;
@@ -29,7 +30,7 @@ function pose(e: Enemy, t: number): Pose {
   return { x: e.x, y, s, a: k, flip, ph };
 }
 
-function fillBody(c: C, path: Path2D, e: Enemy, t: number, base: string, lw = 0.09) {
+export function fillBody(c: C, path: Path2D, e: Enemy, t: number, base: string, lw = 0.09) {
   const g = c.createRadialGradient(-0.3, -0.45, 0.05, 0, 0, 1.35);
   g.addColorStop(0, shade(base, 0.16));
   g.addColorStop(0.45, base);
@@ -61,7 +62,7 @@ function fillBody(c: C, path: Path2D, e: Enemy, t: number, base: string, lw = 0.
 }
 
 /** Eye: solid dot in body mode, soft halo in glow mode (composite 'lighter' set by caller). */
-function eye(c: C, mode: Mode, x: number, y: number, r: number, col: string, rot = 0, squash = 0.75) {
+export function eye(c: C, mode: Mode, x: number, y: number, r: number, col: string, rot = 0, squash = 0.75) {
   if (mode === 'body') {
     c.fillStyle = mix(col, '#ffffff', 0.35);
     c.beginPath();
@@ -624,7 +625,7 @@ function wyrm(c: C, e: Enemy, t: number, P: Pose, mode: Mode) {
   c.restore();
 }
 
-const DRAW: Record<EnemyId, (c: C, e: Enemy, t: number, P: Pose, mode: Mode) => void> = {
+const DRAW: Partial<Record<EnemyId, (c: C, e: Enemy, t: number, P: Pose, mode: Mode) => void>> = {
   shade: shadeEnemy,
   skitter,
   wraith,
@@ -652,9 +653,12 @@ function render(c: C, e: Enemy, t: number, mode: Mode) {
     c.save();
     c.translate(P.x, P.y);
     c.scale(P.s, P.s);
-    DRAW[e.def.id](c, e, t, P, mode);
+    // dazed wobble while stunned (same transform in both passes so glows stay aligned)
+    if (e.stunT > 0) c.rotate(Math.sin(t * 7 + P.ph) * 0.16);
+    (DRAW[e.def.id] ?? DAY_DRAW[e.def.id] ?? shadeEnemy)(c, e, t, P, mode);
     c.restore();
   }
+  if (e.stunT > 0) stunStars(c, e, t, P, mode);
   if (mode === 'glow') {
     const R = P.s * 1.9;
     const ag = c.createRadialGradient(P.x, P.y, 0, P.x, P.y, R);
@@ -673,6 +677,50 @@ function render(c: C, e: Enemy, t: number, mode: Mode) {
     }
   }
   c.restore();
+}
+
+/** Little stars circling above a stunned enemy's head. */
+function stunStars(c: C, e: Enemy, t: number, P: Pose, mode: Mode) {
+  const cx = P.x,
+    cy = P.y - P.s * (e.def.boss ? 1.25 : 1.15) - 0.05;
+  const rx = Math.max(0.16, P.s * 0.75),
+    ry = rx * 0.35;
+  const n = 3;
+  const fade = Math.min(1, e.stunT / 0.25);
+  for (let i = 0; i < n; i++) {
+    const a = t * 5 + (i / n) * TAU;
+    const x = cx + Math.cos(a) * rx,
+      y = cy + Math.sin(a) * ry;
+    const front = Math.sin(a) > 0;
+    const r = (front ? 0.075 : 0.055) * (e.def.boss ? 1.4 : 1);
+    if (mode === 'body') {
+      c.save();
+      c.globalAlpha *= fade * (front ? 1 : 0.7);
+      c.translate(x, y);
+      c.rotate(t * 3 + i);
+      c.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const rr = k % 2 ? r * 0.42 : r;
+        const aa = (k / 10) * TAU - Math.PI / 2;
+        if (k) c.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+        else c.moveTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+      }
+      c.closePath();
+      c.fillStyle = '#ffe36a';
+      c.fill();
+      c.strokeStyle = 'rgba(90,60,0,0.9)';
+      c.lineWidth = 0.014;
+      c.stroke();
+      c.restore();
+    } else {
+      const R = r * 2.6;
+      const g = c.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, `rgba(255,236,140,${0.55 * fade})`);
+      g.addColorStop(1, 'rgba(255,236,140,0)');
+      c.fillStyle = g;
+      c.fillRect(x - R, y - R, R * 2, R * 2);
+    }
+  }
 }
 
 function eliteAura(c: C, e: Enemy, t: number, P: Pose) {
@@ -747,9 +795,10 @@ export function fakeEnemy(id: EnemyId, x: number, y: number): Enemy {
     age: 5,
     hit: 0,
     abilityCd: 0,
-    facing: id === 'wyrm' ? -0.5 : 0,
+    facing: id === 'wyrm' ? -0.5 : id === 'moth' || id === 'roc' || id === 'husk' ? -Math.PI / 2 : 0,
     bounty: 0,
     elite: false,
+    stunT: 0,
   };
 }
 
@@ -759,14 +808,14 @@ export function drawEnemyIcon(ctx: C, id: EnemyId, size: number) {
   ctx.beginPath();
   ctx.rect(0, 0, size, size);
   ctx.clip();
-  const span = id === 'wyrm' ? 4.4 : id === 'colossus' ? 2.6 : 2.5;
+  const span = id === 'wyrm' ? 4.4 : id === 'colossus' || id === 'behemoth' ? 2.6 : id === 'roc' || id === 'moth' ? 3.0 : 2.5;
   const k = size / (span * def.radius);
   ctx.translate(size / 2, size / 2);
   ctx.scale(k, k);
   let e: Enemy;
   if (id === 'wyrm') e = fakeEnemy(id, def.radius * 1.2, FLY_HEIGHT - def.radius * 0.7);
   else if (def.flying) e = fakeEnemy(id, 0, FLY_HEIGHT - def.radius * 0.15);
-  else e = fakeEnemy(id, 0, id === 'brute' || id === 'colossus' ? def.radius * 0.1 : 0);
+  else e = fakeEnemy(id, 0, id === 'brute' || id === 'colossus' || id === 'behemoth' || id === 'boar' ? def.radius * 0.1 : 0);
   drawEnemy(ctx, e, 1.2);
   ctx.globalCompositeOperation = 'lighter';
   drawEnemyGlow(ctx, e, 1.2);

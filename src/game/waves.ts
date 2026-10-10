@@ -1,4 +1,4 @@
-import { DIFFICULTY, Difficulty, ENEMIES, EnemyId, RIFT_SCHEDULE, waveBudget } from './config';
+import { DIFFICULTY, Difficulty, enemyByRole, ENEMIES, EnemyId, Realm, REALMS, waveBudget } from './config';
 import type { StringKey } from '../i18n/en';
 import { Rng } from './rng';
 
@@ -20,33 +20,24 @@ export interface WavePlan {
   counts: Partial<Record<EnemyId, number>>;
 }
 
-export function riftsOpenAt(wave: number): number {
-  return RIFT_SCHEDULE.filter((w) => w <= wave).length;
+export function riftsOpenAt(wave: number, realm: Realm = 'night'): number {
+  return REALMS[realm].riftSchedule.filter((w) => w <= wave).length;
 }
 
-const REGULAR: EnemyId[] = ['shade', 'skitter', 'wraith', 'brute', 'brood', 'warden', 'carapace'];
 
-const WEIGHTS: Record<EnemyId, number> = {
-  shade: 10,
-  skitter: 5,
-  wraith: 4,
-  brute: 3,
-  brood: 3,
-  warden: 2,
-  carapace: 3,
-  colossus: 0,
-  wyrm: 0,
-};
 
 /** Deterministically build the spawn list for a wave. */
-export function planWave(wave: number, difficulty: Difficulty, seed: number): WavePlan {
+export function planWave(wave: number, difficulty: Difficulty, seed: number, realm: Realm = 'night'): WavePlan {
   const rng = new Rng(seed * 31 + wave * 1013);
-  const rifts = riftsOpenAt(wave);
+  const rifts = riftsOpenAt(wave, realm);
+  const R = REALMS[realm];
+  const WEIGHTS = R.weights;
+  const role = (r: Parameters<typeof enemyByRole>[1]) => enemyByRole(realm, r);
   let budget = waveBudget(wave) * DIFFICULTY[difficulty].budget;
   const spawns: WaveSpawn[] = [];
   const counts: Partial<Record<EnemyId, number>> = {};
-  const pool = REGULAR.filter((id) => ENEMIES[id].firstWave <= wave);
-  const newEnemy = REGULAR.find((id) => ENEMIES[id].firstWave === wave) ?? null;
+  const pool = R.regular.filter((id) => ENEMIES[id].firstWave <= wave);
+  const newEnemy = R.regular.find((id) => ENEMIES[id].firstWave === wave) ?? null;
   let tag: StringKey | null = null;
   let boss = false;
   let t = 0;
@@ -62,15 +53,16 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
 
   if (wave % 10 === 0) {
     boss = true;
-    const bossId: EnemyId = wave % 20 === 0 ? 'wyrm' : 'colossus';
-    tag = bossId === 'wyrm' ? 'wave.wyrm' : 'wave.colossus';
+    const air = wave % 20 === 0;
+    const bossId: EnemyId = role(air ? 'bossAir' : 'bossGround');
+    tag = air ? 'wave.wyrm' : 'wave.colossus';
     budget *= 0.55;
     // escorts first, boss arrives a bit later
     t = 0;
     addGroup(bossId, 1, 0, rng.int(0, rifts - 1));
     budget += ENEMIES[bossId].threat; // boss is free, budget goes to escorts
     if (wave >= 30) {
-      addGroup(bossId === 'wyrm' ? 'colossus' : 'wyrm', 1, 0);
+      addGroup(role(air ? 'bossGround' : 'bossAir'), 1, 0);
       budget += 60;
       tag = 'wave.eclipse';
     }
@@ -80,22 +72,25 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
     const theme = themes[(wave / 5 - 1) % 3];
     if (theme === 'air') {
       tag = 'wave.air';
-      while (budget > ENEMIES.wraith.threat * 3) {
-        const n = Math.min(rng.int(4, 9), Math.floor(budget / ENEMIES.wraith.threat));
-        t += addGroup('wraith', n, 0.55) + rng.range(1.5, 3.5);
+      const fl = role('flyer');
+      while (budget > ENEMIES[fl].threat * 3) {
+        const n = Math.min(rng.int(4, 9), Math.floor(budget / ENEMIES[fl].threat));
+        t += addGroup(fl, n, 0.55) + rng.range(1.5, 3.5);
       }
     } else if (theme === 'swarm') {
       tag = 'wave.swarm';
       while (budget > 3) {
-        const n = Math.min(rng.int(10, 20), Math.floor(budget / ENEMIES.skitter.threat));
-        t += addGroup('skitter', n, 0.22) + rng.range(1.5, 3);
+        const fa = role('fast');
+        const n = Math.min(rng.int(10, 20), Math.floor(budget / ENEMIES[fa].threat));
+        t += addGroup(fa, n, 0.22) + rng.range(1.5, 3);
       }
     } else {
       tag = 'wave.siege';
-      while (budget > ENEMIES.brute.threat) {
-        const n = Math.min(rng.int(2, 4), Math.floor(budget / ENEMIES.brute.threat));
-        t += addGroup('brute', n, 1.4) + rng.range(2, 4);
-        if (budget > 4) t += addGroup('shade', Math.min(6, Math.floor(budget / 2)), 0.6) * 0.5;
+      const br = role('breaker');
+      while (budget > ENEMIES[br].threat) {
+        const n = Math.min(rng.int(2, 4), Math.floor(budget / ENEMIES[br].threat));
+        t += addGroup(br, n, 1.4) + rng.range(2, 4);
+        if (budget > 4) t += addGroup(role('basic'), Math.min(6, Math.floor(budget / 2)), 0.6) * 0.5;
       }
     }
   }
@@ -111,11 +106,11 @@ export function planWave(wave: number, difficulty: Difficulty, seed: number): Wa
     const affordable = pool.filter((id) => ENEMIES[id].threat <= budget);
     if (!affordable.length) break;
     let total = 0;
-    for (const id of affordable) total += WEIGHTS[id];
+    for (const id of affordable) total += WEIGHTS[id] ?? 1;
     let roll = rng.next() * total;
     let id = affordable[0];
     for (const a of affordable) {
-      roll -= WEIGHTS[a];
+      roll -= WEIGHTS[a] ?? 1;
       if (roll <= 0) {
         id = a;
         break;

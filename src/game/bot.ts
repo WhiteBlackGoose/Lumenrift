@@ -63,7 +63,7 @@ export class Bot {
   private act(): boolean {
     const g = this.g;
     const w = g.wave + (g.phase === 'build' ? 1 : 0);
-    const towers = g.buildings.filter((b) => b.def.kind === 'tower' || b.def.id === 'frost');
+    const towers = g.buildings.filter((b) => b.def.kind === 'tower' || b.def.id === 'frost' || b.def.id === 'fountain');
 
     // Beacon upgrades
     const coreGate = [0, 4, 8, 13, 19];
@@ -74,10 +74,11 @@ export class Bot {
     }
 
     // Harvesters
-    const harvesters = g.buildings.filter((b) => b.def.id === 'harvester');
-    if (w >= 2 && harvesters.length < Math.min(1 + Math.floor(w / 4), 8) && towers.length >= 4 + harvesters.length * 2 && g.money >= BUILDINGS.harvester.levels[0].cost) {
+    const eco = g.R.ecoId;
+    const harvesters = g.buildings.filter((b) => b.def.id === eco);
+    if (w >= 2 && harvesters.length < Math.min(1 + Math.floor(w / 4), 8) && towers.length >= 4 + harvesters.length * 2 && g.money >= BUILDINGS[eco].levels[0].cost) {
       const spot = this.crystalSpot();
-      if (spot && g.place('harvester', spot.x, spot.y)) return true;
+      if (spot && g.place(eco, spot.x, spot.y)) return true;
     }
     for (const h of harvesters) {
       const c = g.upgradeCost(h);
@@ -116,20 +117,39 @@ export class Bot {
 
   private chooseTower(w: number, count: number): BuildingId {
     const g = this.g;
-    const opts: [BuildingId, number][] = [['arbalest', w < 8 ? 6 : 2]];
-    if (w >= 2) opts.push(['thorns', 1]);
-    if (g.isUnlocked('mortar')) opts.push(['mortar', 4]);
-    if (g.isUnlocked('frost') && count >= 5) opts.push(['frost', 1.5]);
-    if (g.isUnlocked('tesla')) opts.push(['tesla', 4]);
-    if (g.isUnlocked('pyre')) opts.push(['pyre', 2]);
-    if (g.isUnlocked('prism')) opts.push(['prism', 4]);
-    if (g.isUnlocked('skyhunter')) opts.push(['skyhunter', 3]);
-    if (g.isUnlocked('obelisk')) opts.push(['obelisk', 4]);
+    // weights per structure: [id, weight, min wave / condition]
+    const table: [BuildingId, number][] =
+      g.realm === 'day'
+        ? [
+            ['javelin', w < 8 ? 6 : 2],
+            ['glyph', w >= 2 ? 1 : 0],
+            ['bell', 4],
+            ['windcatcher', count >= 5 ? 1.5 : 0],
+            ['snare', w >= 4 ? 1 : 0],
+            ['halo', 3],
+            ['fountain', count >= 6 ? 1.5 : 0],
+            ['falconry', 3],
+            ['lens', 4],
+            ['ballista', 3],
+            ['titan', 4],
+          ]
+        : [
+            ['arbalest', w < 8 ? 6 : 2],
+            ['thorns', w >= 2 ? 1 : 0],
+            ['mortar', 4],
+            ['frost', count >= 5 ? 1.5 : 0],
+            ['tesla', 4],
+            ['pyre', 2],
+            ['prism', 4],
+            ['skyhunter', 3],
+            ['obelisk', 4],
+          ];
+    const opts = table.filter(([id, v]) => v > 0 && g.isUnlocked(id));
     let total = 0;
     for (const [, v] of opts) total += v;
     let r = this.rng.next() * total;
     for (const [id, v] of opts) if ((r -= v) <= 0) return id;
-    return 'arbalest';
+    return opts[0]?.[0] ?? (g.realm === 'day' ? 'javelin' : 'arbalest');
   }
 
   private crystalSpot(): { x: number; y: number } | null {
@@ -139,7 +159,7 @@ export class Bot {
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
         if (g.map.terrain[idx(x, y)] !== Terrain.Crystal) continue;
-        if (!g.canPlace('harvester', x, y).ok) continue;
+        if (!g.canPlace(g.R.ecoId, x, y).ok) continue;
         const d = Math.hypot(x - CORE_X, y - CORE_Y);
         if (d < bd) {
           bd = d;
@@ -152,7 +172,8 @@ export class Bot {
   private towerSpot(id: BuildingId): { x: number; y: number } | null {
     const g = this.g;
     const L = BUILDINGS[id].levels[0];
-    const range = id === 'thorns' ? 0.5 : (L.range ?? 2.5);
+    const trap = BUILDINGS[id].kind === 'trap';
+    const range = trap ? 0.5 : (L.range ?? 2.5);
     const minR = L.minRange ?? 0;
     const path = this.paths();
     let best: { x: number; y: number } | null = null,
@@ -163,14 +184,14 @@ export class Bot {
         const i = idx(x, y);
         if (g.buildingAt[i] || g.map.terrain[i] !== Terrain.Grass) continue;
         const isPath = onPath.has(i);
-        if (id === 'thorns' ? !isPath : isPath && this.rng.chance(0.85)) continue;
+        if (trap ? !isPath : isPath && this.rng.chance(0.85)) continue;
         let cov = 0;
         for (const p of path) {
           const d = Math.hypot(p.x - x - 0.5, p.y - y - 0.5);
           if (d <= range && d >= minR) cov += 1 / (1 + Math.hypot(p.x - CORE_X - 0.5, p.y - CORE_Y - 0.5) * 0.12);
         }
         const dc = Math.hypot(x - CORE_X, y - CORE_Y);
-        const score = cov * 10 - dc * (id === 'obelisk' || id === 'frost' ? 2 : 0.6) + this.rng.next() * 3;
+        const score = cov * 10 - dc * (id === 'obelisk' || id === 'frost' || id === 'titan' || id === 'fountain' ? 2 : 0.6) + this.rng.next() * 3;
         if (score > bs && g.canPlace(id, x, y).ok) {
           bs = score;
           best = { x, y };
@@ -182,7 +203,7 @@ export class Bot {
   /** Try a short wall segment that lengthens the enemy paths the most per wall. */
   private tryWall(): boolean {
     const g = this.g;
-    const walls = g.buildings.filter((b) => b.def.id === 'wall').length;
+    const walls = g.buildings.filter((b) => b.def.id === g.R.wallId).length;
     if (walls > 10 + g.wave * 3) return false;
     const rifts = g.map.rifts.slice(0, g.riftCount);
     const total = () => rifts.reduce((s, r) => s + Math.min(g.flowG[idx(r.x, r.y)], 500), 0);
@@ -206,8 +227,8 @@ export class Bot {
       for (let k = -(len >> 1); k <= len >> 1; k++) tiles.push(horiz ? { x: c.x + k, y: c.y } : { x: c.x, y: c.y + k });
       const placed = [];
       for (const t of tiles) {
-        if (g.canPlace('wall', t.x, t.y).ok) {
-          const b = g.place('wall', t.x, t.y);
+        if (g.canPlace(g.R.wallId, t.x, t.y).ok) {
+          const b = g.place(g.R.wallId, t.x, t.y);
           if (b) placed.push(b);
         }
       }
@@ -224,7 +245,7 @@ export class Bot {
     }
     if (!best) return false;
     let any = false;
-    for (const t of best) if (g.place('wall', t.x, t.y)) any = true;
+    for (const t of best) if (g.place(g.R.wallId, t.x, t.y)) any = true;
     return any;
   }
 }

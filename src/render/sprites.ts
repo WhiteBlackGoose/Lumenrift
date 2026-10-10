@@ -1,8 +1,9 @@
 // Procedural art for LUMENRIFT. All drawing is Canvas2D; world functions expect a ctx scaled to 1 unit = 1 tile.
-import { BUILDINGS, BuildingId, CORE_X, CORE_Y, ENEMIES, EnemyId } from '../game/config';
+import { BUILDINGS, BuildingId, CORE_X, CORE_Y, ENEMIES, EnemyId, Realm } from '../game/config';
 import type { Game } from '../game/game';
 import { drawBuildingIcon } from './sprites/buildings';
 import { drawCore } from './sprites/core';
+import { drawBlightWell } from './sprites/day-buildings';
 import { drawEnemyIcon } from './sprites/enemies';
 import { glow, rgba } from './sprites/util';
 
@@ -14,7 +15,8 @@ export { drawEnemy, drawEnemyGlow, FLY_HEIGHT } from './sprites/enemies';
 const TAU = Math.PI * 2;
 
 /** Swirling violet tear in the ground at rift tile (x,y). */
-export function drawRift(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, state: 'open' | 'forming'): void {
+export function drawRift(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, state: 'open' | 'forming', realm: Realm = 'night'): void {
+  if (realm === 'day') return drawBlightWell(ctx, x, y, t, state);
   const cx = x + 0.5,
     cy = y + 0.5;
   const open = state === 'open';
@@ -78,13 +80,13 @@ export function drawRift(ctx: CanvasRenderingContext2D, x: number, y: number, t:
 }
 
 /** UI icon: draws the building / enemy / Beacon centred in a size×size box at (0,0). */
-export function drawIcon(ctx: CanvasRenderingContext2D, id: BuildingId | EnemyId | 'core', size: number): void {
-  if (id === 'core') {
+export function drawIcon(ctx: CanvasRenderingContext2D, id: BuildingId | EnemyId | 'core' | 'core-day', size: number): void {
+  if (id === 'core' || id === 'core-day') {
     ctx.save();
     const k = size / 3.6;
     ctx.scale(k, k);
     ctx.translate(1.8 - (CORE_X + 0.5), 2.25 - (CORE_Y + 0.5));
-    const fake = { coreLevel: 1, coreHp: 1, coreMaxHp: 1, coreHurt: 0, coreAngle: 0.6 } as unknown as Game;
+    const fake = { realm: id === 'core-day' ? 'day' : 'night', coreLevel: 1, coreHp: 1, coreMaxHp: 1, coreHurt: 0, coreAngle: 0.6 } as unknown as Game;
     drawCore(ctx, fake, 1.5);
     ctx.restore();
     return;

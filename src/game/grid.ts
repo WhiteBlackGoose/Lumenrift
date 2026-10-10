@@ -1,4 +1,4 @@
-import { CORE_X, CORE_Y, MAP_H, MAP_W } from './config';
+import { CORE_X, CORE_Y, MAP_H, MAP_W, Realm } from './config';
 import { Rng } from './rng';
 
 export enum Terrain {
@@ -7,7 +7,17 @@ export enum Terrain {
   Crystal = 2,
   Core = 3,
   Rift = 4,
+  Water = 5, // ponds (impassable, unbuildable)
+  Tree = 6, // groves (impassable, unbuildable)
 }
+
+/** Terrain nothing can walk through or build on. */
+export function isSolid(t: number): boolean {
+  return t === Terrain.Rock || t === Terrain.Water || t === Terrain.Tree;
+}
+
+/** Map generator version: 1 = original night maps (kept so old saves load unchanged), 2 = ponds & groves. */
+export const MAP_VERSION = 2;
 
 export const INF = 1e9;
 
@@ -139,17 +149,17 @@ function isCoreIdx(i: number): boolean {
 }
 
 /** Procedurally generate a map: rock outcrops, crystal veins, and rift sites along the edges. */
-export function generateMap(seed: number): MapData {
+export function generateMap(seed: number, realm: Realm = 'night', version = MAP_VERSION): MapData {
   for (let attempt = 0; attempt < 50; attempt++) {
     const rng = new Rng(seed + attempt * 7919);
-    const m = tryGenerate(rng);
+    const m = tryGenerate(rng, false, realm, version);
     if (m) return m;
   }
   // Extremely unlikely; fall back to an empty field.
-  return tryGenerate(new Rng(seed), true)!;
+  return tryGenerate(new Rng(seed), true, realm, version)!;
 }
 
-function tryGenerate(rng: Rng, empty = false): MapData | null {
+function tryGenerate(rng: Rng, empty: boolean, realm: Realm, version: number): MapData | null {
   const w = MAP_W,
     h = MAP_H;
   const terrain = new Uint8Array(w * h);
@@ -184,8 +194,8 @@ function tryGenerate(rng: Rng, empty = false): MapData | null {
   const nearCore = (x: number, y: number, d: number) => Math.abs(x - cx) <= d && Math.abs(y - cy) <= d;
 
   if (!empty) {
-    // Rock outcrops via short random walks.
-    const clusters = rng.int(9, 13);
+    // Rock outcrops (marble ruins by day) via short random walks.
+    const clusters = version < 2 ? rng.int(9, 13) : realm === 'day' ? rng.int(4, 7) : rng.int(7, 10);
     for (let c = 0; c < clusters; c++) {
       let x = rng.int(1, w - 2),
         y = rng.int(1, h - 2);
@@ -219,8 +229,53 @@ function tryGenerate(rng: Rng, empty = false): MapData | null {
     }
   }
 
+  if (!empty && version >= 2) {
+    const free = (x: number, y: number, core: number, rift: number) =>
+      inBounds(x, y) && terrain[idx(x, y)] === Terrain.Grass && !nearCore(x, y, core) && !nearRift(x, y, rift);
+    // Ponds: a few compact blobs grown from a seed tile.
+    const ponds = realm === 'day' ? rng.int(2, 3) : rng.int(1, 2);
+    for (let p = 0; p < ponds; p++) {
+      let tries = 0,
+        x = 0,
+        y = 0;
+      do {
+        x = rng.int(3, w - 4);
+        y = rng.int(3, h - 4);
+      } while (!free(x, y, 5, 4) && tries++ < 60);
+      if (tries >= 60) continue;
+      const size = rng.int(4, 9);
+      const cells = [[x, y]];
+      terrain[idx(x, y)] = Terrain.Water;
+      for (let n = 1; n < size; n++) {
+        const [bx, by] = rng.pick(cells);
+        const [dx, dy] = rng.pick([
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]);
+        if (free(bx + dx, by + dy, 4, 3)) {
+          terrain[idx(bx + dx, by + dy)] = Terrain.Water;
+          cells.push([bx + dx, by + dy]);
+        }
+      }
+    }
+    // Groves: small clumps of trees (gnarled and dead at night, lush by day).
+    const groves = realm === 'day' ? rng.int(7, 11) : rng.int(5, 8);
+    for (let g = 0; g < groves; g++) {
+      let x = rng.int(1, w - 2),
+        y = rng.int(1, h - 2);
+      const n = rng.int(1, 4);
+      for (let k = 0; k < n; k++) {
+        if (free(x, y, 3, 2)) terrain[idx(x, y)] = Terrain.Tree;
+        x += rng.int(-1, 1);
+        y += rng.int(-1, 1);
+      }
+    }
+  }
+
   // Verify every rift can reach the core.
-  const flow = computeFlow((i) => (terrain[i] === Terrain.Rock ? INF : 1), new Float32Array(w * h));
+  const flow = computeFlow((i) => (isSolid(terrain[i]) ? INF : 1), new Float32Array(w * h));
   for (const r of rifts) if (flow[idx(r.x, r.y)] >= INF) return null;
 
   return { w, h, terrain, rifts, noise };

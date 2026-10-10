@@ -1,7 +1,7 @@
 import './style.css';
 import { audio, SfxName } from './audio/audio';
 import { Bot } from './game/bot';
-import { BUILDINGS, BuildingId, Difficulty, MAP_W } from './game/config';
+import { BUILDINGS, BuildingId, Difficulty, ENEMIES, MAP_W, Realm } from './game/config';
 import { Building, Game, GameEvent, SaveData } from './game/game';
 import { isCoreTile } from './game/grid';
 import { Renderer, ViewState } from './render/renderer';
@@ -9,8 +9,8 @@ import { Input } from './ui/input';
 import { initInstall } from './ui/install';
 import { deleteSession, listSessions, loadSession, newSessionId, saveSession } from './ui/sessions';
 import { saveBest } from './ui/storage';
-import { applyDocument, onLangChange, t } from './i18n';
-import { AppApi, bname, BUILD_KEYS, UI } from './ui/ui';
+import { applyDocument, onLangChange, setScreenRealm, t } from './i18n';
+import { AppApi, bname, buildKeys, UI } from './ui/ui';
 
 const params = new URLSearchParams(location.search);
 
@@ -22,6 +22,14 @@ const SHOOT_SFX: Partial<Record<string, SfxName>> = {
   prism: 'prism',
   skyhunter: 'missile',
   core: 'core_shot',
+  javelin: 'javelin',
+  bell: 'bell',
+  windcatcher: 'gust',
+  halo: 'halo',
+  lens: 'lens',
+  ballista: 'ballista',
+  falconry: 'falcon',
+  glyph: 'glyph',
 };
 
 class App implements AppApi {
@@ -33,6 +41,9 @@ class App implements AppApi {
   paused = false;
   touch = false;
   difficulty: Difficulty = 'normal';
+  realm: Realm = loadRealm();
+  /** Realm the HUD/title were last built for. */
+  private shownRealm: Realm | null = null;
 
   renderer: Renderer;
   private ui: UI;
@@ -103,6 +114,7 @@ class App implements AppApi {
     window.addEventListener('keydown', unlock, { once: true });
 
     this.resize();
+    if (params.get('realm') === 'day' || params.get('realm') === 'night') this.realm = params.get('realm') as Realm;
     if (params.get('autostart')) {
       this.startGame((params.get('autostart') as Difficulty) || 'normal');
     } else {
@@ -122,7 +134,7 @@ class App implements AppApi {
     this.sessionId = null;
     this.autoBot = null;
     this.renderer.reset();
-    const g = new Game((Math.random() * 1e9) | 0, 'casual');
+    const g = new Game((Math.random() * 1e9) | 0, 'casual', this.realm);
     this.attract = new Bot(g, { skill: 0.8, maze: false });
     // fast-forward so the backdrop shows a living defence
     for (let i = 0; i < 60 * 70; i++) {
@@ -131,6 +143,7 @@ class App implements AppApi {
     }
     g.drainEvents();
     this.game = g;
+    this.applyRealm(g.realm);
     this.placing = null;
     this.selected = null;
     this.coreSelected = false;
@@ -148,7 +161,7 @@ class App implements AppApi {
   startGame(d: Difficulty) {
     this.difficulty = d;
     const seed = params.get('seed') ? Number(params.get('seed')) : (Math.random() * 1e9) | 0;
-    this.beginRun(new Game(seed, d));
+    this.beginRun(new Game(seed, d, this.realm));
     this.checkpoints = [];
     this.takeCheckpoint();
     // debug runs (?bot / ?ff) are not saved as sessions
@@ -254,6 +267,28 @@ class App implements AppApi {
   }
 
   /** Shared setup for a fresh or restored game. */
+  /** Pick the campaign shown on the title screen (and used for new games). */
+  setRealm(r: Realm) {
+    this.realm = r;
+    try {
+      localStorage.setItem('lumen.realm', r);
+    } catch {
+      /* ignore */
+    }
+    this.startAttract();
+  }
+
+  /** Switch look, wording, music and HUD to a realm. */
+  private applyRealm(r: Realm) {
+    document.body.classList.toggle('realm-day', r === 'day');
+    setScreenRealm(r);
+    audio.setRealm(r);
+    if (this.shownRealm !== r) {
+      this.shownRealm = r;
+      this.ui.relocalize();
+    }
+  }
+
   private beginRun(game: Game) {
     this.fallenNight = null;
     this.attract = null;
@@ -262,6 +297,8 @@ class App implements AppApi {
     this.renderer.reset();
     this.ui.resetRun();
     this.game = game;
+    this.realm = game.realm;
+    this.applyRealm(game.realm);
     this.placing = null;
     this.selected = null;
     this.coreSelected = false;
@@ -459,7 +496,7 @@ class App implements AppApi {
       return;
     }
     if (!g || this.attract || this.ui.screenOpen) return;
-    const bid = BUILD_KEYS[k];
+    const bid = buildKeys(g.realm)[k];
     if (bid) {
       if (g.isUnlocked(bid)) this.setPlacing(this.placing === bid ? null : bid);
       else {
@@ -543,7 +580,7 @@ class App implements AppApi {
       if (g.over && !this.overHandled) {
         this.overHandled = true;
         const won = g.won;
-        const best = !g.sandbox && saveBest(g.difficulty, won ? g.wave : g.wave - 1);
+        const best = !g.sandbox && saveBest(g.difficulty, won ? g.wave : g.wave - 1, g.realm);
         // a victory stays resumable as endless night; a fall stays resumable as a respawn
         if (!won) this.fallenNight = g.wave;
         this.saveNow();
@@ -591,7 +628,7 @@ class App implements AppApi {
         audio.play('explosion', { pan: pan(ev.x), volume: Math.min(1, 0.4 + ev.r * 0.4) });
         break;
       case 'die':
-        audio.play(ev.enemy === 'colossus' || ev.enemy === 'wyrm' ? 'boss_die' : 'enemy_die', { pan: pan(ev.x) });
+        audio.play(ENEMIES[ev.enemy].boss ? 'boss_die' : ENEMIES[ev.enemy].realm === 'day' ? 'blight_die' : 'enemy_die', { pan: pan(ev.x) });
         break;
       case 'hit':
         audio.play('hit', { pan: pan(ev.x), volume: 0.5 });
@@ -618,7 +655,7 @@ class App implements AppApi {
         audio.play('wave_clear');
         break;
       case 'nova':
-        audio.play('nova');
+        audio.play(this.game?.realm === 'day' ? 'daybreak' : 'nova');
         break;
       case 'strikeWarn':
         audio.play('obelisk_charge', { pan: pan(ev.x) });
@@ -638,7 +675,7 @@ class App implements AppApi {
         audio.setMood('build');
         break;
       case 'riftOpen':
-        audio.play('rift_open', { pan: pan(ev.x) });
+        audio.play(this.game?.realm === 'day' ? 'blight_well' : 'rift_open', { pan: pan(ev.x) });
         break;
       case 'bossSpawn':
         audio.play('boss_spawn', { pan: pan(ev.x) });
@@ -648,6 +685,15 @@ class App implements AppApi {
         break;
       case 'frost':
         audio.play('frost_pulse', { pan: pan(ev.x), volume: 0.5 });
+        break;
+      case 'snare':
+        audio.play('snare', { pan: pan(ev.x) });
+        break;
+      case 'slamWarn':
+        audio.play('titan_charge', { pan: pan(ev.x) });
+        break;
+      case 'slam':
+        audio.play('titan_slam', { pan: pan(ev.x) });
         break;
       case 'error':
         audio.play('error');
@@ -669,4 +715,12 @@ class App implements AppApi {
 // Installable app: register the offline service worker in production builds.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
+function loadRealm(): Realm {
+  try {
+    return localStorage.getItem('lumen.realm') === 'day' ? 'day' : 'night';
+  } catch {
+    return 'night';
+  }
 }

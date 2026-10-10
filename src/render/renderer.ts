@@ -1,9 +1,10 @@
-import { BUILDINGS, BuildingId, CORE_X, CORE_Y, MAP_H, MAP_W, NOVA_RADIUS } from '../game/config';
+import { BUILDINGS, BuildingId, CORE_X, CORE_Y, ENEMIES, MAP_H, MAP_W } from '../game/config';
 import { Building, Enemy, Game, GameEvent } from '../game/game';
 import { idx, Terrain } from '../game/grid';
 import { Camera } from './camera';
 import { Particles, PK } from './particles';
 import * as S from './sprites';
+import { drawFalcon } from './sprites/falcon';
 import { cacheFrame } from './sprites/util';
 
 export interface ViewState {
@@ -59,6 +60,7 @@ export class Renderer {
   private chains: Chain[] = [];
   private pillars: Pillar[] = [];
   private lights: Light[] = [];
+  private slams: { x: number; y: number; r: number; t: number; max: number }[] = [];
   private flashRed = 0;
   private flashWhite = 0;
   private darkness = 0.44;
@@ -83,6 +85,7 @@ export class Renderer {
     this.parts.list.length = 0;
     this.chains = [];
     this.pillars = [];
+    this.slams = [];
     this.lights = [];
     this.flashRed = this.flashWhite = 0;
     this.cam.shake = 0;
@@ -144,7 +147,7 @@ export class Renderer {
     const want = this.cam.fullFit * this.dpr * 1.8;
     const px = [32, 40, 48, 56, 64, 72].find((b) => b >= want) ?? 72;
     if (this.ground && this.groundFor === game && this.ground.width >= MAP_W * px * 0.8) return;
-    this.ground = S.renderGround(game.map, px);
+    this.ground = S.renderGround(game.map, px, game.realm);
     this.groundFor = game;
     // The ground is fully opaque, so a transparent sample means the browser's canvas backend failed
     // (seen in Firefox after a GPU process reset; only a browser restart fixes it).
@@ -178,8 +181,9 @@ export class Renderer {
         break;
       }
       case 'die': {
-        const col = ENEMY_DEATH_COLORS[ev.enemy] ?? '#ff4fd8';
-        P.burst(ev.x, ev.y, ev.big ? 26 : 10, { kind: PK.Smoke, color: '#120c1c', speed: ev.big ? 2.5 : 1.4, life: 0.9, size: ev.big ? 0.35 : 0.18, grow: 0.3 });
+        const blight = ENEMIES[ev.enemy].realm === 'day';
+        const col = blight ? ENEMIES[ev.enemy].eye : (ENEMY_DEATH_COLORS[ev.enemy] ?? '#ff4fd8');
+        P.burst(ev.x, ev.y, ev.big ? 26 : 10, { kind: PK.Smoke, color: blight ? '#5a5a2a' : '#120c1c', speed: ev.big ? 2.5 : 1.4, life: 0.9, size: ev.big ? 0.35 : 0.18, grow: 0.3 });
         P.burst(ev.x, ev.y, ev.big ? 24 : 7, { kind: PK.Ember, color: col, speed: ev.big ? 4 : 2, life: 0.7, size: 0.06, grav: -1.5 });
         P.add({ kind: PK.Glow, x: ev.x, y: ev.y, size: ev.big ? 1.4 : 0.5, life: 0.35, color: col });
         if (ev.big) {
@@ -226,11 +230,14 @@ export class Renderer {
       case 'nova': {
         const cx = CORE_X + 0.5,
           cy = CORE_Y + 0.5;
-        P.add({ kind: PK.Ring, x: cx, y: cy, size: 1, grow: NOVA_RADIUS * 2.8, life: 0.45, color: '#fff2c0' });
-        P.add({ kind: PK.Ring, x: cx, y: cy, size: 0.6, grow: NOVA_RADIUS * 2.2, life: 0.6, color: '#ffc861' });
-        P.burst(cx, cy, 60, { kind: PK.Spark, color: '#ffe8a0', speed: 12, life: 0.45, size: 0.1, drag: 3 });
-        this.addLight(cx, cy, NOVA_RADIUS * 2.2, 1, 0.6);
-        this.flashWhite = 0.5;
+        const R = ev.r;
+        const day = game.realm === 'day';
+        P.add({ kind: PK.Ring, x: cx, y: cy, size: 1, grow: R * 2.8, life: 0.45, color: day ? '#ffffff' : '#fff2c0' });
+        P.add({ kind: PK.Ring, x: cx, y: cy, size: 0.6, grow: R * 2.2, life: 0.6, color: day ? '#ffe9a0' : '#ffc861' });
+        P.burst(cx, cy, 60, { kind: PK.Spark, color: day ? '#fffbe6' : '#ffe8a0', speed: 12, life: 0.45, size: 0.1, drag: 3 });
+        if (day) P.burst(cx, cy, 30, { kind: PK.Shard, color: '#fff3c4', speed: 7, life: 0.9, size: 0.12, drag: 2 });
+        this.addLight(cx, cy, R * 2.2, 1, 0.6);
+        this.flashWhite = day ? 0.8 : 0.5;
         this.cam.addShake(0.5);
         break;
       }
@@ -263,6 +270,45 @@ export class Renderer {
         break;
       case 'thorns':
         P.burst(ev.x, ev.y, 4, { kind: PK.Spark, color: '#e8f07a', speed: 2.5, life: 0.2, size: 0.05 });
+        break;
+      case 'pulse':
+        P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.4, grow: ev.r * 3.2, life: 0.38, color: ev.color });
+        P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.2, grow: ev.r * 2.4, life: 0.5, color: '#fff3c8' });
+        this.addLight(ev.x, ev.y, ev.r * 1.4, 0.5, 0.25);
+        break;
+      case 'gust': {
+        const a = Math.atan2(ev.ty - ev.y, ev.tx - ev.x);
+        for (let i = 0; i < 7; i++) {
+          const f = Math.random();
+          P.add({
+            kind: PK.Spark,
+            x: ev.x + (ev.tx - ev.x) * f + (Math.random() - 0.5) * 0.4,
+            y: ev.y + (ev.ty - ev.y) * f + (Math.random() - 0.5) * 0.4,
+            vx: Math.cos(a) * 7,
+            vy: Math.sin(a) * 7,
+            life: 0.3,
+            max: 0.3,
+            size: 0.07,
+            color: '#e8f8ff',
+            drag: 3,
+          });
+        }
+        break;
+      }
+      case 'snare':
+        P.burst(ev.x, ev.y, 12, { kind: PK.Ember, color: '#ffb84d', speed: 1.8, life: 0.6, size: 0.08, grav: 3 });
+        P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.2, grow: 1.6, life: 0.4, color: '#ffc861' });
+        break;
+      case 'slamWarn':
+        this.slams.push({ x: ev.x, y: ev.y, r: ev.r, t: 1.0, max: 1.0 });
+        break;
+      case 'slam':
+        P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.3, grow: ev.r * 6, life: 0.55, color: '#fff6dc' });
+        P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.2, grow: ev.r * 4, life: 0.7, color: '#ffd27a' });
+        P.burst(ev.x, ev.y, 26, { kind: PK.Smoke, color: '#b8a888', speed: 3.2, life: 0.9, size: 0.22, grow: 0.5 });
+        P.burst(ev.x, ev.y, 20, { kind: PK.Shard, color: '#fff3d0', speed: 6, life: 0.7, size: 0.12, grav: 5 });
+        this.addLight(ev.x, ev.y, ev.r * 3, 1, 0.4);
+        this.cam.addShake(0.55);
         break;
       case 'frost':
         P.add({ kind: PK.Ring, x: ev.x, y: ev.y, size: 0.3, grow: ev.r * 1.6, life: 0.9, color: '#8fe8ff' });
@@ -318,11 +364,14 @@ export class Renderer {
     this.chains = this.chains.filter((c) => c.t > 0);
     for (const p of this.pillars) p.t -= dt;
     this.pillars = this.pillars.filter((p) => p.t > 0);
+    for (const sl of this.slams) sl.t -= dt;
+    this.slams = this.slams.filter((sl) => sl.t > 0);
     for (const l of this.lights) l.t -= dt;
     this.lights = this.lights.filter((l) => l.t > 0);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.5);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 1.5);
-    const targetDark = game.phase === 'wave' ? 0.6 : 0.44;
+    // night: darkness deepens during waves; day: clear sunlight, with a faint blight haze while the Blight attacks
+    const targetDark = game.realm === 'day' ? (game.phase === 'wave' ? 0.13 : 0) : game.phase === 'wave' ? 0.6 : 0.44;
     this.darkness += (targetDark - this.darkness) * Math.min(1, dt * 0.8);
     if (dt <= 0) return;
 
@@ -357,7 +406,7 @@ export class Renderer {
       if (e.burnT > 0 && Math.random() < dt * 10) {
         P.add({ kind: PK.Ember, x: e.x + (Math.random() - 0.5) * e.def.radius, y: e.y - (e.def.flying ? S.FLY_HEIGHT : 0), vy: -1.4, life: 0.5, max: 0.5, size: 0.05, color: '#ff8a3a' });
       }
-      if (!this.lowFx && (e.def.id === 'shade' || e.def.id === 'wraith' || e.def.boss) && Math.random() < dt * (e.def.boss ? 14 : 3)) {
+      if (!this.lowFx && (e.def.id === 'shade' || e.def.id === 'wraith' || e.def.id === 'moth' || e.def.id === 'sporemother' || e.def.boss) && Math.random() < dt * (e.def.boss ? 14 : 3)) {
         P.add({
           kind: PK.Smoke,
           x: e.x + (Math.random() - 0.5) * e.def.radius,
@@ -367,7 +416,7 @@ export class Renderer {
           max: 0.8,
           size: e.def.radius * 0.5,
           grow: 0.2,
-          color: '#140c20',
+          color: e.def.realm === 'day' ? '#6b6a3a' : '#140c20',
         });
       }
     }
@@ -396,8 +445,11 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#04050b';
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    if (game.realm === 'day') this.drawSky();
+    else {
+      ctx.fillStyle = '#04050b';
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
     const s = cam.scale * dpr;
     const ox = cam.toScreenX(0) * dpr,
@@ -409,8 +461,8 @@ export class Renderer {
     ctx.drawImage(this.ground!, 0, 0, MAP_W, MAP_H);
 
     // rifts
-    for (const r of game.activeRifts()) S.drawRift(ctx, r.x, r.y, t, 'open');
-    if (game.phase === 'build') for (const r of game.formingRifts()) S.drawRift(ctx, r.x, r.y, t, 'forming');
+    for (const r of game.activeRifts()) S.drawRift(ctx, r.x, r.y, t, 'open', game.realm);
+    if (game.phase === 'build') for (const r of game.formingRifts()) S.drawRift(ctx, r.x, r.y, t, 'forming', game.realm);
 
     this.drawPaths(game, view);
     if (view.placing) this.drawGrid(game, view);
@@ -422,7 +474,7 @@ export class Renderer {
     if (view.selected) this.drawRange(view.selected.def.id, view.selected.x, view.selected.y, view.selected.level, true);
     if (view.coreSelected) {
       this.circle(CORE_X + 0.5, CORE_Y + 0.5, game.core.range, 'rgba(255,220,140,0.08)', 'rgba(255,220,140,0.45)');
-      this.circle(CORE_X + 0.5, CORE_Y + 0.5, NOVA_RADIUS, null, 'rgba(255,240,190,0.25)', [0.2, 0.2]);
+      this.circle(CORE_X + 0.5, CORE_Y + 0.5, game.R.abilityRadius, null, 'rgba(255,240,190,0.25)', [0.2, 0.2]);
     }
 
     // buildings, the Beacon and ground enemies interleaved by y so tall sprites overlap correctly
@@ -441,6 +493,8 @@ export class Renderer {
 
     this.drawProjectilesBody(game);
     for (const e of air) S.drawEnemy(ctx, e, t);
+    for (const p of game.projectiles) if (p.kind === 'falcon' && p.t >= 0) drawFalcon(ctx, p.x, p.y, p.vx, p.vy, t);
+    if (game.realm === 'day') this.drawCloudShadows();
 
     // ------------------------------------------------ lighting
     this.drawLighting(game);
@@ -489,7 +543,7 @@ export class Renderer {
     l.globalCompositeOperation = 'source-over';
     l.globalAlpha = 1;
     l.clearRect(0, 0, W, H);
-    l.fillStyle = `rgba(3,4,16,${this.darkness.toFixed(3)})`;
+    l.fillStyle = game.realm === 'day' ? `rgba(46,30,60,${this.darkness.toFixed(3)})` : `rgba(3,4,16,${this.darkness.toFixed(3)})`;
     l.fillRect(0, 0, W, H);
     l.globalCompositeOperation = 'destination-out';
     const spr = this.lightSprite();
@@ -527,31 +581,118 @@ export class Renderer {
     ctx.drawImage(this.light, 0, 0, this.canvas.width, this.canvas.height);
   }
 
+  /** Day: an open sky around the floating sky-garden, with soft clouds drifting by. */
+  private drawSky() {
+    const ctx = this.ctx;
+    const W = this.canvas.width,
+      H = this.canvas.height;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#7fbfe9');
+    g.addColorStop(0.55, '#b9def5');
+    g.addColorStop(1, '#e9f5fb');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    const cloud = this.cloudSprite();
+    const t = this.time;
+    for (let i = 0; i < 7; i++) {
+      const w = W * (0.28 + (i % 3) * 0.1);
+      const x = (((i * 0.37 + t * 0.006 * (1 + (i % 2))) % 1.4) - 0.2) * W;
+      const y = ((i * 0.53) % 1) * H;
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(cloud, x - w / 2, y - w * 0.2, w, w * 0.4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private cloudSprite(): HTMLCanvasElement {
+    let c = this.glowCache.get('__cloud');
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 102;
+      const g = c.getContext('2d')!;
+      for (const [x, y, r] of [
+        [70, 60, 40],
+        [120, 45, 52],
+        [175, 58, 42],
+        [140, 70, 38],
+        [95, 72, 30],
+      ]) {
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, 'rgba(255,255,255,0.95)');
+        grd.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 256, 102);
+      }
+      this.glowCache.set('__cloud', c);
+    }
+    return c;
+  }
+
+  /** Day: big soft cloud shadows drifting slowly across the land. */
+  private drawCloudShadows() {
+    const ctx = this.ctx;
+    const t = this.time;
+    const spr = this.glow('#1c3a1c');
+    for (let i = 0; i < 4; i++) {
+      const r = 5 + (i % 2) * 3;
+      const x = (((i * 11.3 + t * 0.35) % (MAP_W + 2 * r)) + MAP_W + 2 * r) % (MAP_W + 2 * r) - r;
+      const y = (i * 6.7 + Math.sin(t * 0.05 + i) * 2) % MAP_H;
+      ctx.globalAlpha = 0.07;
+      ctx.drawImage(spr, x - r, y - r * 0.7, r * 2, r * 1.4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   private drawColorGlows(game: Game) {
     const ctx = this.ctx;
     const t = this.time;
+    const day = game.realm === 'day';
+    const k = day ? 0.45 : 1; // additive glows wash out in sunlight
     const pulse = 0.8 + Math.sin(t * 2) * 0.1;
     const cr = 2.6 + game.coreLevel * 0.35;
-    ctx.globalAlpha = 0.28 * pulse * (game.coreHurt > 0 ? 0.6 : 1);
+    ctx.globalAlpha = 0.28 * k * pulse * (game.coreHurt > 0 ? 0.6 : 1);
     ctx.drawImage(this.glow(game.coreHurt > 0 ? '#ff5d5d' : '#ffc861'), CORE_X + 0.5 - cr, CORE_Y + 0.5 - cr, cr * 2, cr * 2);
     for (const b of game.buildings) {
       const L = b.def.levels[b.level].light;
       if (L <= 0 || b.def.kind === 'wall') continue;
       const r = L * 0.55;
-      ctx.globalAlpha = (b.firing > 0 ? 0.3 : 0.16) + b.level * 0.03;
+      ctx.globalAlpha = ((b.firing > 0 ? 0.3 : 0.16) + b.level * 0.03) * k;
       ctx.drawImage(this.glow(b.def.color), b.x + 0.5 - r, b.y + 0.5 - r, r * 2, r * 2);
     }
     for (const r of game.activeRifts()) {
-      ctx.globalAlpha = 0.35 + Math.sin(t * 3 + r.x) * 0.08;
-      ctx.drawImage(this.glow('#d23cff'), r.x + 0.5 - 1.6, r.y + 0.5 - 1.6, 3.2, 3.2);
+      ctx.globalAlpha = (0.35 + Math.sin(t * 3 + r.x) * 0.08) * (day ? 0.8 : 1);
+      ctx.drawImage(this.glow(day ? '#9bd13a' : '#d23cff'), r.x + 0.5 - 1.6, r.y + 0.5 - 1.6, 3.2, 3.2);
     }
-    ctx.globalAlpha = 0.14;
-    for (const c of this.crystals) ctx.drawImage(this.glow('#5fd8ff'), c.x - 0.8, c.y - 0.8, 1.6, 1.6);
+    ctx.globalAlpha = day ? 0.08 : 0.14;
+    for (const c of this.crystals) ctx.drawImage(this.glow(day ? '#ffe27a' : '#5fd8ff'), c.x - 0.8, c.y - 0.8, 1.6, 1.6);
     ctx.globalAlpha = 1;
   }
 
   private drawBeams(game: Game) {
     const ctx = this.ctx;
+    for (const b of game.buildings) {
+      if (b.def.id !== 'lens' || b.firing <= 0 || !b.targetUid) continue;
+      const e = game.enemyByUidGet(b.targetUid);
+      if (!e || e.dead) continue;
+      const sx = b.x + 0.5 + Math.cos(b.angle) * 0.3,
+        sy = b.y + 0.5 - 0.35 + Math.sin(b.angle) * 0.3;
+      const ex = e.x,
+        ey = e.y - (e.def.flying ? S.FLY_HEIGHT : 0);
+      const flick = 1 + Math.sin(this.time * 50) * 0.08;
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = '#ffb030';
+      ctx.lineWidth = 0.34 * flick;
+      line(ctx, sx, sy, ex, ey);
+      ctx.globalAlpha = 0.95;
+      ctx.strokeStyle = '#fffbe0';
+      ctx.lineWidth = 0.1 * flick;
+      line(ctx, sx, sy, ex, ey);
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(this.glow('#ffe27a'), ex - 0.6, ey - 0.6, 1.2, 1.2);
+      if (Math.random() < 0.4) this.parts.add({ kind: PK.Ember, x: ex, y: ey, vx: (Math.random() - 0.5) * 2, vy: -1.5, life: 0.4, max: 0.4, size: 0.06, color: '#ffd27a' });
+    }
     for (const b of game.buildings) {
       if (b.def.id !== 'prism' || b.firing <= 0 || !b.targetUid) continue;
       const e = game.enemyByUidGet(b.targetUid);
@@ -611,6 +752,27 @@ export class Renderer {
     const ctx = this.ctx;
     for (const p of game.projectiles) {
       if (p.t < 0) continue;
+      if (p.kind === 'javelin' || p.kind === 'ballista') {
+        const a = p.kind === 'javelin' ? Math.atan2(p.vy, p.vx) : Math.atan2(p.ty - p.y, p.tx - p.x);
+        const len = p.kind === 'javelin' ? 0.55 : 0.75;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(a);
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(-len / 2, 0.12, len, 0.05);
+        ctx.fillStyle = p.kind === 'javelin' ? '#8a5a2a' : '#6a4a2a';
+        ctx.fillRect(-len / 2, -0.025, len, 0.05);
+        ctx.fillStyle = p.kind === 'javelin' ? '#ffe2a0' : '#e8e8f0';
+        ctx.beginPath();
+        ctx.moveTo(len / 2 + 0.12, 0);
+        ctx.lineTo(len / 2 - 0.04, -0.06);
+        ctx.lineTo(len / 2 - 0.04, 0.06);
+        ctx.fill();
+        ctx.fillStyle = '#fff6dc';
+        ctx.fillRect(-len / 2 - 0.05, -0.07, 0.1, 0.14);
+        ctx.restore();
+        continue;
+      }
       if (p.kind === 'shell') {
         const k = Math.min(1, p.t / p.flight);
         const h = Math.sin(Math.PI * k) * 1.3;
@@ -669,7 +831,25 @@ export class Renderer {
   private drawStrikes(game: Game) {
     const ctx = this.ctx;
     const t = this.time;
+    // Winged Titan: a growing shadow and a closing ring where it will land
+    for (const sl of this.slams) {
+      const k = 1 - sl.t / sl.max;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.15 + k * 0.35;
+      ctx.fillStyle = '#1a1a10';
+      ctx.beginPath();
+      ctx.ellipse(sl.x, sl.y, sl.r * (0.3 + k * 0.7), sl.r * (0.18 + k * 0.42), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.3 + k * 0.6;
+      ctx.strokeStyle = '#fff6dc';
+      ctx.lineWidth = 0.06;
+      ctx.beginPath();
+      ctx.arc(sl.x, sl.y, sl.r * (1.6 - k * 0.6), 0, Math.PI * 2);
+      ctx.stroke();
+    }
     for (const s of game.strikes) {
+      if (s.kind === 'slam') continue;
       const k = 1 - s.t / 0.85; // 0 → 1 as it charges
       ctx.globalAlpha = 0.25 + k * 0.5;
       ctx.strokeStyle = '#fff1a8';
@@ -750,7 +930,7 @@ export class Renderer {
       if (p.forming && game.phase !== 'build') continue;
       ctx.setLineDash(p.forming ? [0.08, 0.3] : [0.18, 0.22]);
       ctx.lineDashOffset = -this.time * 0.9;
-      ctx.strokeStyle = p.forming ? 'rgba(255,120,220,0.35)' : 'rgba(255,90,210,0.45)';
+      ctx.strokeStyle = game.realm === 'day' ? (p.forming ? 'rgba(120,40,140,0.35)' : 'rgba(120,30,140,0.55)') : p.forming ? 'rgba(255,120,220,0.35)' : 'rgba(255,90,210,0.45)';
       ctx.globalAlpha = vis;
       ctx.lineWidth = 0.07;
       ctx.beginPath();
@@ -775,7 +955,7 @@ export class Renderer {
       ctx.lineTo(MAP_W, y);
     }
     ctx.stroke();
-    if (view.placing === 'harvester') {
+    if (view.placing && BUILDINGS[view.placing].onlyOn === 'crystal') {
       ctx.strokeStyle = 'rgba(120,230,255,0.8)';
       ctx.lineWidth = 0.05;
       ctx.setLineDash([0.12, 0.1]);

@@ -1,10 +1,12 @@
 // Saved game sessions in localStorage: a small index for the title screen plus one blob per game.
-import { Difficulty } from '../game/config';
+import { Difficulty, Realm } from '../game/config';
 import type { Game, SaveData } from '../game/game';
 
 export interface SessionMeta {
   id: string;
   difficulty: Difficulty;
+  /** Missing for sessions saved before the day realm existed (= night). */
+  realm?: Realm;
   night: number; // the night being fought, or the one coming up
   inNight: boolean; // saved in the middle of a night
   beacon: number; // Beacon health, 0..1
@@ -60,6 +62,7 @@ export function saveSession(id: string, g: Game, created: number, checkpoints: S
   const meta: SessionMeta = {
     id,
     difficulty: g.difficulty,
+    realm: g.realm,
     night: fallenNight ?? (g.phase === 'build' && !g.over ? g.wave + 1 : g.wave),
     inNight: g.phase === 'wave' && !fallenNight,
     beacon: Math.max(0, Math.min(1, g.coreHp / g.coreMaxHp)),
