@@ -598,7 +598,6 @@ function drawWater(c: CanvasRenderingContext2D, map: MapData, T: TFn, N: TFn, pa
   if (!waterTiles(map, T).length) return;
   const rim = pondPath(map, T, N, 0.12);
   const body = pondPath(map, T, N, 0);
-  const deep = pondPath(map, T, N, -0.24);
   c.save();
   c.fillStyle = 'rgba(0,0,0,0.25)';
   c.translate(0.03, 0.05);
@@ -613,13 +612,10 @@ function drawWater(c: CanvasRenderingContext2D, map: MapData, T: TFn, N: TFn, pa
   c.translate(0.02, 0.035);
   c.fillStyle = pal.water;
   c.fill(body);
-  c.globalAlpha = 0.45;
-  c.fillStyle = pal.deep;
-  c.fill(pondPath(map, T, N, -0.12));
-  c.globalAlpha = 0.7;
-  c.fill(deep);
-  c.globalAlpha = 1;
   c.clip(body);
+  // Depth: a blurred copy of the pond's own silhouette, so the water darkens smoothly with distance
+  // from the shore as one continuous gradient (per-tile circles left pale seams between them).
+  depthShade(c, map, T, body, pal.deep);
   // reflections: soft horizontal glints
   for (const [x, y] of waterTiles(map, T)) {
     const r = new TRng(x * 733 + y * 389 + 5);
@@ -635,6 +631,49 @@ function drawWater(c: CanvasRenderingContext2D, map: MapData, T: TFn, N: TFn, pa
       c.stroke();
     }
   }
+  c.restore();
+}
+
+/** Fill `deep` over the pond with alpha rising from the shore to the middle (clipped by the caller). */
+function depthShade(c: CanvasRenderingContext2D, map: MapData, T: TFn, body: Path2D, deep: string) {
+  const tiles = waterTiles(map, T);
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const [x, y] of tiles) {
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x + 1);
+    y1 = Math.max(y1, y + 1);
+  }
+  x0 -= 1;
+  y0 -= 1;
+  x1 += 1;
+  y1 += 1;
+  const m = c.getTransform();
+  const sc = Math.hypot(m.a, m.b) || 1;
+  const cw = Math.max(1, Math.ceil((x1 - x0) * sc)),
+    ch = Math.max(1, Math.ceil((y1 - y0) * sc));
+  // silhouette of the pond in the deep colour
+  const sil = document.createElement('canvas');
+  sil.width = cw;
+  sil.height = ch;
+  const g = sil.getContext('2d')!;
+  g.scale(sc, sc);
+  g.translate(-x0, -y0);
+  g.fillStyle = deep;
+  g.fill(body);
+  // blurred copy: opaque in the middle, fading toward every shore
+  const blur = document.createElement('canvas');
+  blur.width = cw;
+  blur.height = ch;
+  const b = blur.getContext('2d')!;
+  b.filter = `blur(${(0.45 * sc).toFixed(1)}px)`;
+  b.drawImage(sil, 0, 0);
+  c.save();
+  c.globalAlpha = 0.8;
+  c.drawImage(blur, x0, y0, x1 - x0, y1 - y0);
   c.restore();
 }
 
