@@ -23,7 +23,7 @@ Something has torn the world open. **Rifts** bleed shadows onto the land, and ea
 You build around it. Walls bend the shadows' path, towers burn them away, crystal harvesters pay for the next line of defence, and every time you **ascend the Beacon** a new tier of weapons opens up. Hold out through thirty nights, including three boss nights and a final **Eclipse**, and the dawn breaks. Or keep going into endless night and see how long the light lasts.
 
 - ☀️ **Two campaigns.** **Night** pits the Beacon against the shadows. **Day** is a sunlit marble sky-garden where winged guardians defend the Sanctum from the Blight. It has its own structures, enemies, currency, landscape and music.
-- 🗺️ **Procedural maps.** Every run has a new layout of rocks or ruins, ponds, groves, resource patches and rift sites.
+- 🗺️ **Procedural maps.** Every run has a new layout of rocks or ruins, ponds, groves, resource patches and rift sites. The landscape carries on past the playable field, with groves thickening into forest, so the battlefield never looks like a board.
 - 🧱 **Real mazing.** Shadows follow a live flow field, so every wall you place re-routes them. A glowing trail shows the current path.
 - 🏰 **13 structures in 5 tiers, each with 3 upgrade levels.** From cheap walls and spike traps up to chain-lightning coils, ramping prism beams and a Sun Obelisk that calls down pillars of fire.
 - 👁️ **9 kinds of shadow.** Swarmers, flyers that ignore your maze, wall-smashing brutes, healers, armoured beetles, egg-sacs that burst into more enemies, and two bosses.

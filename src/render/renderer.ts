@@ -52,7 +52,7 @@ export class Renderer {
   readonly cam = new Camera();
   readonly parts = new Particles();
   private dpr = 1;
-  private ground: HTMLCanvasElement | null = null;
+  private ground: S.Ground | null = null;
   private groundFor: Game | null = null;
   private light: HTMLCanvasElement;
   private lctx: CanvasRenderingContext2D;
@@ -146,13 +146,14 @@ export class Renderer {
     // across the zoom range; zooming only rescales it, so pinch-zoom never triggers a re-render.
     const want = this.cam.fullFit * this.dpr * 1.8;
     const px = [32, 40, 48, 56, 64, 72].find((b) => b >= want) ?? 72;
-    if (this.ground && this.groundFor === game && this.ground.width >= MAP_W * px * 0.8) return;
+    if (this.ground && this.groundFor === game && this.ground.inner.width >= MAP_W * px * 0.8) return;
     this.ground = S.renderGround(game.map, px, game.realm);
     this.groundFor = game;
     // The ground is fully opaque, so a transparent sample means the browser's canvas backend failed
     // (seen in Firefox after a GPU process reset; only a browser restart fixes it).
     try {
-      const a = this.ground.getContext('2d')?.getImageData(this.ground.width >> 1, this.ground.height >> 1, 1, 1).data[3] ?? 0;
+      const gi = this.ground.inner;
+      const a = gi.getContext('2d')?.getImageData(gi.width >> 1, gi.height >> 1, 1, 1).data[3] ?? 0;
       if (a === 0) this.graphicsBroken = true;
     } catch {
       this.graphicsBroken = true;
@@ -445,11 +446,9 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    if (game.realm === 'day') this.drawSky();
-    else {
-      ctx.fillStyle = '#04050b';
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
+    // beyond the generated surroundings: the same base colour the scenery fades into
+    ctx.fillStyle = this.ground?.base ?? '#04050b';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const s = cam.scale * dpr;
     const ox = cam.toScreenX(0) * dpr,
@@ -458,7 +457,18 @@ export class Renderer {
     world();
 
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.ground!, 0, 0, MAP_W, MAP_H);
+    const G = this.ground!;
+    // scenery around the field first, then the field itself at full resolution on top (they line up exactly)
+    // only the four strips around the field are blitted from the outer image, so no pixel is drawn twice
+    const M = G.margin,
+      po = G.outer.width / (MAP_W + 2 * M);
+    const strip = (wx: number, wy: number, ww: number, wh: number) =>
+      ctx.drawImage(G.outer, (wx + M) * po, (wy + M) * po, ww * po, wh * po, wx, wy, ww, wh);
+    strip(-M, -M, MAP_W + 2 * M, M); // top
+    strip(-M, MAP_H, MAP_W + 2 * M, M); // bottom
+    strip(-M, 0, M, MAP_H); // left
+    strip(MAP_W, 0, M, MAP_H); // right
+    ctx.drawImage(G.inner, 0, 0, MAP_W, MAP_H);
 
     // rifts
     for (const r of game.activeRifts()) S.drawRift(ctx, r.x, r.y, t, 'open', game.realm);
@@ -581,63 +591,17 @@ export class Renderer {
     ctx.drawImage(this.light, 0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** Day: an open sky around the floating sky-garden, with soft clouds drifting by. */
-  private drawSky() {
-    const ctx = this.ctx;
-    const W = this.canvas.width,
-      H = this.canvas.height;
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#7fbfe9');
-    g.addColorStop(0.55, '#b9def5');
-    g.addColorStop(1, '#e9f5fb');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    const cloud = this.cloudSprite();
-    const t = this.time;
-    for (let i = 0; i < 7; i++) {
-      const w = W * (0.28 + (i % 3) * 0.1);
-      const x = (((i * 0.37 + t * 0.006 * (1 + (i % 2))) % 1.4) - 0.2) * W;
-      const y = ((i * 0.53) % 1) * H;
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(cloud, x - w / 2, y - w * 0.2, w, w * 0.4);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  private cloudSprite(): HTMLCanvasElement {
-    let c = this.glowCache.get('__cloud');
-    if (!c) {
-      c = document.createElement('canvas');
-      c.width = 256;
-      c.height = 102;
-      const g = c.getContext('2d')!;
-      for (const [x, y, r] of [
-        [70, 60, 40],
-        [120, 45, 52],
-        [175, 58, 42],
-        [140, 70, 38],
-        [95, 72, 30],
-      ]) {
-        const grd = g.createRadialGradient(x, y, 0, x, y, r);
-        grd.addColorStop(0, 'rgba(255,255,255,0.95)');
-        grd.addColorStop(1, 'rgba(255,255,255,0)');
-        g.fillStyle = grd;
-        g.fillRect(0, 0, 256, 102);
-      }
-      this.glowCache.set('__cloud', c);
-    }
-    return c;
-  }
-
   /** Day: big soft cloud shadows drifting slowly across the land. */
   private drawCloudShadows() {
     const ctx = this.ctx;
     const t = this.time;
     const spr = this.glow('#1c3a1c');
-    for (let i = 0; i < 4; i++) {
+    // drift across the field and its surroundings alike
+    const span = MAP_W + 30;
+    for (let i = 0; i < 7; i++) {
       const r = 5 + (i % 2) * 3;
-      const x = (((i * 11.3 + t * 0.35) % (MAP_W + 2 * r)) + MAP_W + 2 * r) % (MAP_W + 2 * r) - r;
-      const y = (i * 6.7 + Math.sin(t * 0.05 + i) * 2) % MAP_H;
+      const x = ((((i * 11.3 + t * 0.35) % span) + span) % span) - 15;
+      const y = ((i * 8.7 + Math.sin(t * 0.05 + i) * 2) % (MAP_H + 16)) - 8;
       ctx.globalAlpha = 0.07;
       ctx.drawImage(spr, x - r, y - r * 0.7, r * 2, r * 1.4);
     }

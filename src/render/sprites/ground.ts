@@ -1,5 +1,5 @@
 import { CORE_X, CORE_Y, Realm } from '../../game/config';
-import { idx, MapData, Terrain } from '../../game/grid';
+import { MapData, Terrain } from '../../game/grid';
 import { facet, glow, mix, ngon, rgba, shade, TRng } from './util';
 
 const GROUND = ['#141d22', '#161b26', '#181a29', '#13201f', '#171f24'];
@@ -7,24 +7,121 @@ const GROUND = ['#141d22', '#161b26', '#181a29', '#13201f', '#171f24'];
 const TAU = Math.PI * 2;
 
 /** Render the static terrain of the whole map to an offscreen canvas at `px` pixels per tile. */
-export function renderGround(map: MapData, px: number, realm: Realm = 'night'): HTMLCanvasElement {
-  const cv = document.createElement('canvas');
-  cv.width = Math.ceil(map.w * px);
-  cv.height = Math.ceil(map.h * px);
-  const c = cv.getContext('2d')!;
-  c.scale(px, px);
-  if (realm === 'day') renderDay(c, map);
-  else renderNight(c, map);
-  return cv;
+export interface Ground {
+  /** The playable field at full resolution (world rect 0,0 – map.w,map.h). */
+  inner: HTMLCanvasElement;
+  /** The field plus `margin` tiles of scenery on every side, at lower resolution. */
+  outer: HTMLCanvasElement;
+  margin: number;
+  /** Colour the outer scenery fades into at its far edges. */
+  base: string;
+}
+
+/** Tiles of decorative scenery generated around the playable field. */
+export const GROUND_MARGIN = 14;
+
+/**
+ * Render the ground so the landscape continues seamlessly past the playable field.
+ * Both canvases are painted from the same extended terrain with the same random sequence, so the
+ * high-resolution field and the low-resolution surroundings line up exactly at the border.
+ */
+export function renderGround(map: MapData, px: number, realm: Realm = 'night'): Ground {
+  const M = GROUND_MARGIN;
+  const ext = extendMap(map, M, realm);
+  const paint = (cv: HTMLCanvasElement, scale: number, ox: number, oy: number) => {
+    const c = cv.getContext('2d')!;
+    c.scale(scale, scale);
+    c.translate(-ox, -oy);
+    if (realm === 'day') renderDay(c, ext, M);
+    else renderNight(c, ext, M);
+    return c;
+  };
+  const inner = document.createElement('canvas');
+  inner.width = Math.ceil(map.w * px);
+  inner.height = Math.ceil(map.h * px);
+  paint(inner, px, M, M);
+  // the surroundings are scenery: render them at a modest resolution to spare memory
+  const po = Math.max(12, Math.min(28, Math.round(px * 0.45)));
+  const outer = document.createElement('canvas');
+  outer.width = Math.ceil(ext.w * po);
+  outer.height = Math.ceil(ext.h * po);
+  const oc = paint(outer, po, 0, 0);
+  // fade the far rim into the base colour so there is never a hard edge, even fully zoomed out
+  const base = realm === 'day' ? '#86b862' : '#10161d';
+  oc.setTransform(1, 0, 0, 1, 0, 0);
+  const W = outer.width,
+    H = outer.height,
+    f = po * 4;
+  const fade = (x0: number, y0: number, x1: number, y1: number, rx: number, ry: number, rw: number, rh: number) => {
+    const g = oc.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, base);
+    g.addColorStop(1, base + '00');
+    oc.fillStyle = g;
+    oc.fillRect(rx, ry, rw, rh);
+  };
+  fade(0, 0, 0, f, 0, 0, W, f);
+  fade(0, H, 0, H - f, 0, H - f, W, f);
+  fade(0, 0, f, 0, 0, 0, f, H);
+  fade(W, 0, W - f, 0, W - f, 0, f, H);
+  return { inner, outer, margin: M, base };
+}
+
+/**
+ * The real map surrounded by generated scenery: open meadow with groves (a forest edge), a few
+ * ruins/boulders and ponds. Never crystal, rifts or a core, so nothing outside looks playable.
+ */
+function extendMap(map: MapData, M: number, realm: Realm): MapData {
+  const w = map.w + 2 * M,
+    h = map.h + 2 * M;
+  const terrain = new Uint8Array(w * h);
+  const noise = new Float32Array(w * h);
+  const r = new TRng(Math.floor(map.noise[1] * 1e9) ^ 0x0b0e);
+  for (let i = 0; i < noise.length; i++) noise[i] = r.next();
+  const inside = (x: number, y: number) => x >= M && y >= M && x < M + map.w && y < M + map.h;
+  for (let y = 0; y < map.h; y++)
+    for (let x = 0; x < map.w; x++) {
+      terrain[(y + M) * w + x + M] = map.terrain[y * map.w + x];
+      noise[(y + M) * w + x + M] = map.noise[y * map.w + x];
+    }
+  // keep a one-tile strip next to the field clear so rifts and paths open onto grass
+  const nearField = (x: number, y: number) => x >= M - 2 && y >= M - 2 && x < M + map.w + 2 && y < M + map.h + 2;
+  const put = (x: number, y: number, t: number) => {
+    if (x < 0 || y < 0 || x >= w || y >= h || inside(x, y) || nearField(x, y)) return;
+    terrain[y * w + x] = t;
+  };
+  const dist = (x: number, y: number) => Math.max(M - x, x - (M + map.w - 1), M - y, y - (M + map.h - 1), 0);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (inside(x, y)) continue;
+      // groves get denser further from the field, framing it with a forest edge
+      const d = dist(x, y);
+      const pTree = (realm === 'day' ? 0.05 : 0.04) + Math.min(0.32, d * 0.025);
+      if (r.next() < pTree * 0.35) {
+        const n = 1 + Math.floor(r.next() * 4);
+        for (let k = 0; k < n; k++) put(x + Math.floor(r.next() * 3) - 1, y + Math.floor(r.next() * 3) - 1, Terrain.Tree);
+      } else if (r.next() < 0.012) put(x, y, Terrain.Rock);
+    }
+  for (let p = 0; p < 7; p++) {
+    let x = Math.floor(r.next() * w),
+      y = Math.floor(r.next() * h);
+    if (inside(x, y) || nearField(x, y)) continue;
+    const size = 3 + Math.floor(r.next() * 6);
+    for (let k = 0; k < size; k++) {
+      put(x, y, Terrain.Water);
+      x += Math.floor(r.next() * 3) - 1;
+      y += Math.floor(r.next() * 3) - 1;
+    }
+  }
+  return { w, h, terrain, noise, rifts: map.rifts.map((q) => ({ x: q.x + M, y: q.y + M })) };
 }
 
 type TFn = (x: number, y: number) => number;
 
-function renderNight(c: CanvasRenderingContext2D, map: MapData) {
+function renderNight(c: CanvasRenderingContext2D, map: MapData, off = 0) {
   const W = map.w,
     H = map.h;
-  const T = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? Terrain.Grass : map.terrain[idx(x, y)]);
-  const N = (x: number, y: number) => map.noise[idx(Math.max(0, Math.min(W - 1, x)), Math.max(0, Math.min(H - 1, y)))];
+  const T = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? Terrain.Grass : map.terrain[y * W + x]);
+  const N = (x: number, y: number) => map.noise[Math.max(0, Math.min(H - 1, y)) * W + Math.max(0, Math.min(W - 1, x))];
   const rng = new TRng(Math.floor(map.noise[0] * 1e9) ^ 0x5eed);
 
   // 1. base + per-tile tint
@@ -53,8 +150,8 @@ function renderNight(c: CanvasRenderingContext2D, map: MapData) {
   }
 
   // 3. flagstone plaza around the Beacon
-  const pcx = CORE_X + 0.5,
-    pcy = CORE_Y + 0.5;
+  const pcx = CORE_X + 0.5 + off,
+    pcy = CORE_Y + 0.5 + off;
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const t = T(x, y);
@@ -294,11 +391,11 @@ function renderNight(c: CanvasRenderingContext2D, map: MapData) {
 
   // 5b. still, dark pools
   drawWater(c, map, T, N, {
-    rim: '#1b2530',
-    rimHi: 'rgba(110,150,200,0.25)',
-    water: '#0a131d',
-    deep: '#050a12',
-    shine: 'rgba(140,180,230,0.16)',
+    rim: '#24323f',
+    rimHi: 'rgba(130,175,225,0.38)',
+    water: '#163049',
+    deep: '#0c1d30',
+    shine: 'rgba(160,200,245,0.3)',
   });
   waterDecor(c, map, T, 'night');
 
@@ -404,12 +501,6 @@ function renderNight(c: CanvasRenderingContext2D, map: MapData) {
   // 7b. gnarled dead trees
   drawTrees(c, map, T, 'night');
 
-  // 8. vignette
-  const vg = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.58);
-  vg.addColorStop(0, 'rgba(3,4,10,0)');
-  vg.addColorStop(1, 'rgba(3,4,10,0.6)');
-  c.fillStyle = vg;
-  c.fillRect(0, 0, W, H);
 }
 
 /** A single faceted crystal shard standing on (x,y), leaning by `ang`. */
@@ -822,14 +913,14 @@ function dayTree(c: CanvasRenderingContext2D, cx: number, cy: number, r: TRng) {
 
 const DAY_GRASS = ['#8cbc66', '#86b862', '#92c06c', '#88b964', '#8fbd68'];
 
-function renderDay(c: CanvasRenderingContext2D, map: MapData) {
+function renderDay(c: CanvasRenderingContext2D, map: MapData, off = 0) {
   const W = map.w,
     H = map.h;
-  const T = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? Terrain.Grass : map.terrain[idx(x, y)]);
-  const N = (x: number, y: number) => map.noise[idx(Math.max(0, Math.min(W - 1, x)), Math.max(0, Math.min(H - 1, y)))];
+  const T = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? Terrain.Grass : map.terrain[y * W + x]);
+  const N = (x: number, y: number) => map.noise[Math.max(0, Math.min(H - 1, y)) * W + Math.max(0, Math.min(W - 1, x))];
   const rng = new TRng(Math.floor(map.noise[0] * 1e9) ^ 0xda7);
-  const pcx = CORE_X + 0.5,
-    pcy = CORE_Y + 0.5;
+  const pcx = CORE_X + 0.5 + off,
+    pcy = CORE_Y + 0.5 + off;
 
   // 1. grass base
   c.fillStyle = '#89b964';
@@ -1080,21 +1171,6 @@ function renderDay(c: CanvasRenderingContext2D, map: MapData) {
 
   // 8. groves
   drawTrees(c, map, T, 'day');
-
-  // 9. edges: soft clouds drifting past the rim of the sky island + gentle vignette
-  const vg = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.6);
-  vg.addColorStop(0, 'rgba(40,70,30,0)');
-  vg.addColorStop(1, 'rgba(40,70,30,0.28)');
-  c.fillStyle = vg;
-  c.fillRect(0, 0, W, H);
-  const crng = new TRng(4242);
-  for (let i = 0; i < 26; i++) {
-    const side = i % 4;
-    const along = crng.range(0, side < 2 ? W : H);
-    const x = side === 0 ? along : side === 1 ? along : side === 2 ? -0.4 : W + 0.4;
-    const y = side === 0 ? -0.4 : side === 1 ? H + 0.4 : along;
-    for (let k = 0; k < 3; k++) glow(c, x + crng.range(-0.8, 0.8), y + crng.range(-0.5, 0.5), crng.range(0.9, 1.8), '#ffffff', crng.range(0.35, 0.55));
-  }
 }
 
 function meadow(c: CanvasRenderingContext2D, x: number, y: number, T: TFn) {

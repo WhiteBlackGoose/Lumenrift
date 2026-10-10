@@ -8,6 +8,7 @@ import { drawEnemyIcon } from './sprites/enemies';
 import { glow, rgba } from './sprites/util';
 
 export { renderGround } from './sprites/ground';
+export type { Ground } from './sprites/ground';
 export { drawBuilding, drawGhost } from './sprites/buildings';
 export { drawCore } from './sprites/core';
 export { drawEnemy, drawEnemyGlow, FLY_HEIGHT } from './sprites/enemies';
